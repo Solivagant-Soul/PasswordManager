@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `DesignDocument/密码管理App_需求规格说明书.md`（当前 v0.4）—— 产品需求的唯一规范，开发与验收均以此为准。
 - `DesignDocument/features/*.feature` —— Gherkin 验收用例（对应 FR-1 ~ FR-12，覆盖正向/负向/异常/边界）。
 - `DesignDocument/openapi.yaml` —— 未来后端预留 OpenAPI 3.0 契约（当前纯本地、无服务端，仅作预留设计）。
+- `DesignDocument/架构视图.md` —— Mermaid 架构视图（系统上下文图、组件图、解锁与找回流程图）。
 
 文档结构要点（便于快速定位）：
 
