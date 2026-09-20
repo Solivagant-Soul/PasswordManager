@@ -1,0 +1,935 @@
+openapi: 3.0.3
+info:
+  title: 密码管理 App —— 未来后端预留 API 契约
+  version: 0.1.0
+  description: |
+    说明：
+    - 当前产品形态为「纯本地、无登录、无云端」，现期并无真实服务端；本契约是**未来可能引入服务端时的预留接口设计**。
+    - 权限要求通过各操作的 `x-permission` 标注；主密码、密码、密保答案、TOTP 密钥等均为 `writeOnly` 字段，服务端响应不得回传明文。
+    - 主密码解锁成功后签发会话令牌（Bearer），锁定或过期后失效。
+  contact:
+    name: 邹卓
+servers:
+  - url: https://api.example.com/v1
+    description: 预留后端地址（占位，实际部署时替换）
+tags:
+  - name: Vault
+    description: 密码库初始化、解锁、锁定、主密码与密保
+  - name: Entries
+    description: 密码条目增删改查与明文查看
+  - name: Categories
+    description: 分类管理
+  - name: Tags
+    description: 标签
+  - name: Password
+    description: 密码生成
+  - name: TOTP
+    description: 动态验证码
+  - name: Backup
+    description: 加密备份、导入导出
+security:
+  - BearerAuth: []
+
+paths:
+  /vault/initialize:
+    post:
+      tags: [Vault]
+      summary: 首次初始化——设置主密码与密保问题
+      operationId: initializeVault
+      security: []
+      x-permission: 无需认证（仅限未初始化状态）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InitializeRequest' }
+      responses:
+        '201':
+          description: 密码库创建成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /vault/unlock:
+    post:
+      tags: [Vault]
+      summary: 主密码解锁，返回会话令牌
+      operationId: unlockVault
+      security: []
+      x-permission: 无需认证
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnlockRequest' }
+      responses:
+        '200':
+          description: 解锁成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnlockResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /vault/lock:
+    post:
+      tags: [Vault]
+      summary: 锁定密码库
+      operationId: lockVault
+      x-permission: 解锁态
+      responses:
+        '204':
+          description: 已锁定
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /vault/change-master-password:
+    post:
+      tags: [Vault]
+      summary: 修改主密码
+      operationId: changeMasterPassword
+      x-permission: 高敏操作，需验证当前主密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangeMasterPasswordRequest' }
+      responses:
+        '204':
+          description: 修改成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /vault/reset:
+    post:
+      tags: [Vault]
+      summary: 忘记主密码——答对全部密保问题后重置
+      operationId: resetMasterPassword
+      security: []
+      x-permission: 无需认证（需答对全部 3 道密保问题）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetRequest' }
+      responses:
+        '204':
+          description: 重置成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /vault/biometric:
+    put:
+      tags: [Vault]
+      summary: 开启或关闭生物识别
+      operationId: setBiometric
+      x-permission: 高敏操作，需验证主密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BiometricRequest' }
+      responses:
+        '204':
+          description: 设置成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /entries:
+    get:
+      tags: [Entries]
+      summary: 列表 / 搜索 / 过滤条目
+      operationId: listEntries
+      x-permission: 解锁态
+      parameters:
+        - $ref: '#/components/parameters/SearchParam'
+        - $ref: '#/components/parameters/CategoryIdQueryParam'
+        - $ref: '#/components/parameters/TagParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: 条目列表（不含明文密码）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntryList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Entries]
+      summary: 新增条目
+      operationId: createEntry
+      x-permission: 解锁态
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntryCreate' }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entry' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /entries/{entryId}:
+    get:
+      tags: [Entries]
+      summary: 查看条目详情
+      operationId: getEntry
+      x-permission: 解锁态
+      parameters:
+        - $ref: '#/components/parameters/EntryIdParam'
+      responses:
+        '200':
+          description: 条目详情（不含明文密码）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entry' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Entries]
+      summary: 更新条目
+      operationId: updateEntry
+      x-permission: 解锁态
+      parameters:
+        - $ref: '#/components/parameters/EntryIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntryUpdate' }
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Entry' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Entries]
+      summary: 删除条目（需二次确认，永久删除）
+      operationId: deleteEntry
+      x-permission: 解锁态
+      parameters:
+        - $ref: '#/components/parameters/EntryIdParam'
+      responses:
+        '204':
+          description: 已永久删除
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /entries/{entryId}/password:
+    get:
+      tags: [Entries]
+      summary: 查看明文密码
+      operationId: revealPassword
+      x-permission: 解锁态即可查看明文（无需二次认证）
+      parameters:
+        - $ref: '#/components/parameters/EntryIdParam'
+      responses:
+        '200':
+          description: 明文密码（仅供查看/自动填充，不得明文落盘）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevealPasswordResponse' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /entries/{entryId}/totp:
+    get:
+      tags: [TOTP]
+      summary: 生成当前 TOTP 动态验证码
+      operationId: getTotp
+      x-permission: 解锁态
+      parameters:
+        - $ref: '#/components/parameters/EntryIdParam'
+      responses:
+        '200':
+          description: 六位动态码与剩余秒数
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpResponse' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: 分类列表
+      operationId: listCategories
+      x-permission: 解锁态
+      responses:
+        '200':
+          description: 分类列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Categories]
+      summary: 新增分类
+      operationId: createCategory
+      x-permission: 解锁态
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryCreate' }
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /categories/{categoryId}:
+    delete:
+      tags: [Categories]
+      summary: 删除分类（条目回退为未分类）
+      operationId: deleteCategory
+      x-permission: 解锁态
+      parameters:
+        - $ref: '#/components/parameters/CategoryIdPathParam'
+      responses:
+        '204':
+          description: 已删除，条目回退未分类
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tags:
+    get:
+      tags: [Tags]
+      summary: 全部标签列表
+      operationId: listTags
+      x-permission: 解锁态
+      responses:
+        '200':
+          description: 标签列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagList' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /password/generate:
+    post:
+      tags: [Password]
+      summary: 生成随机密码
+      operationId: generatePassword
+      x-permission: 解锁态
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeneratePasswordRequest' }
+      responses:
+        '200':
+          description: 生成的密码
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GeneratePasswordResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /backup/export:
+    post:
+      tags: [Backup]
+      summary: 导出加密备份
+      operationId: exportBackup
+      x-permission: 高敏操作，需验证主密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExportRequest' }
+      responses:
+        '200':
+          description: 加密备份文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /backup/import:
+    post:
+      tags: [Backup]
+      summary: 导入加密备份
+      operationId: importBackup
+      x-permission: 解锁态，需备份口令
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, password]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                password:
+                  type: string
+                  writeOnly: true
+      responses:
+        '200':
+          description: 导入结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResult' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+  /backup/import/csv:
+    post:
+      tags: [Backup]
+      summary: 导入 CSV（重复条目跳过）
+      operationId: importCsv
+      x-permission: 解锁态
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入结果（含跳过数量）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResult' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 主密码解锁成功后签发的会话令牌，锁定或过期后失效
+
+  parameters:
+    EntryIdParam:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryIdPathParam:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SearchParam:
+      name: search
+      in: query
+      description: 关键字，匹配标题/用户名/网址（大小写不敏感）
+      schema:
+        type: string
+        maxLength: 100
+    CategoryIdQueryParam:
+      name: categoryId
+      in: query
+      schema:
+        type: string
+        format: uuid
+    TagParam:
+      name: tag
+      in: query
+      schema:
+        type: string
+        maxLength: 30
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 机器可读错误码
+        message:
+          type: string
+          description: 面向用户的错误提示
+        details:
+          type: array
+          description: 字段级校验错误明细
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+
+    SecurityQuestion:
+      type: object
+      required: [question, answer]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 100
+        answer:
+          type: string
+          minLength: 1
+          maxLength: 60
+          writeOnly: true
+
+    InitializeRequest:
+      type: object
+      required: [masterPassword, confirmMasterPassword, securityQuestions]
+      properties:
+        masterPassword:
+          type: string
+          minLength: 8
+          maxLength: 64
+          writeOnly: true
+          description: 至少含两类字符（大写/小写字母、数字、符号）
+        confirmMasterPassword:
+          type: string
+          writeOnly: true
+          description: 须与 masterPassword 一致
+        securityQuestions:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/SecurityQuestion'
+
+    UnlockRequest:
+      type: object
+      required: [masterPassword]
+      properties:
+        masterPassword:
+          type: string
+          writeOnly: true
+
+    UnlockResponse:
+      type: object
+      required: [accessToken, expiresInSeconds]
+      properties:
+        accessToken:
+          type: string
+        expiresInSeconds:
+          type: integer
+        biometricEnabled:
+          type: boolean
+
+    ChangeMasterPasswordRequest:
+      type: object
+      required: [currentMasterPassword, newMasterPassword, confirmNewMasterPassword]
+      properties:
+        currentMasterPassword:
+          type: string
+          writeOnly: true
+        newMasterPassword:
+          type: string
+          minLength: 8
+          maxLength: 64
+          writeOnly: true
+        confirmNewMasterPassword:
+          type: string
+          writeOnly: true
+
+    ResetRequest:
+      type: object
+      required: [securityAnswers, newMasterPassword, confirmNewMasterPassword]
+      properties:
+        securityAnswers:
+          type: array
+          minItems: 3
+          maxItems: 3
+          description: 按设置时的顺序回答全部 3 道密保问题
+          items:
+            type: string
+            writeOnly: true
+        newMasterPassword:
+          type: string
+          minLength: 8
+          maxLength: 64
+          writeOnly: true
+        confirmNewMasterPassword:
+          type: string
+          writeOnly: true
+
+    BiometricRequest:
+      type: object
+      required: [enabled, masterPassword]
+      properties:
+        enabled:
+          type: boolean
+        masterPassword:
+          type: string
+          writeOnly: true
+          description: 开关生物识别需验证主密码
+
+    Category:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+
+    CategoryCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+
+    EntryCreate:
+      type: object
+      required: [title, password]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        username:
+          type: string
+          maxLength: 255
+        password:
+          type: string
+          minLength: 1
+          maxLength: 255
+          writeOnly: true
+          description: 必填非空，支持任意可见字符含符号
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+        notes:
+          type: string
+          maxLength: 2000
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        tags:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 30
+        totpSecret:
+          type: string
+          writeOnly: true
+          description: Base32 格式 TOTP 密钥
+
+    EntryUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        username:
+          type: string
+          maxLength: 255
+        password:
+          type: string
+          minLength: 1
+          maxLength: 255
+          writeOnly: true
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+        notes:
+          type: string
+          maxLength: 2000
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        tags:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 30
+        totpSecret:
+          type: string
+          writeOnly: true
+
+    Entry:
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        username:
+          type: string
+        url:
+          type: string
+          format: uri
+          nullable: true
+        notes:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        tags:
+          type: array
+          items:
+            type: string
+        totpEnabled:
+          type: boolean
+          description: 是否已配置 TOTP 密钥
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EntryList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    RevealPasswordResponse:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+
+    GeneratePasswordRequest:
+      type: object
+      required: [length]
+      properties:
+        length:
+          type: integer
+          minimum: 4
+          maximum: 64
+          default: 16
+        useUppercase:
+          type: boolean
+          default: true
+        useLowercase:
+          type: boolean
+          default: true
+        useDigits:
+          type: boolean
+          default: true
+        useSymbols:
+          type: boolean
+          default: true
+        excludeAmbiguous:
+          type: boolean
+          default: false
+
+    GeneratePasswordResponse:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+
+    TotpResponse:
+      type: object
+      required: [code, remainingSeconds]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+        remainingSeconds:
+          type: integer
+          minimum: 0
+          maximum: 30
+
+    ExportRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          writeOnly: true
+          description: 备份口令，默认主密码亦可另设独立口令
+
+    ImportResult:
+      type: object
+      required: [importedCount, skippedCount]
+      properties:
+        importedCount:
+          type: integer
+        skippedCount:
+          type: integer
+          description: 因重复而跳过的条目数
+        errors:
+          type: array
+          items:
+            type: string
+
+    TagList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+
+  responses:
+    BadRequest:
+      description: 请求参数或请求体校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: VALIDATION_ERROR
+            message: 请求参数非法
+    Unauthorized:
+      description: 未解锁或会话令牌无效/过期
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: UNAUTHORIZED
+            message: 请先解锁
+    Forbidden:
+      description: 认证通过但操作被拒绝（密保答错、锁定态、未二次验证等）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: FORBIDDEN
+            message: 无权限执行该操作
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: NOT_FOUND
+            message: 资源不存在
+    Conflict:
+      description: 状态冲突（重复资源或已达上限）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: LIMIT_REACHED
+            message: 条目已达 5000 上限
+    TooManyRequests:
+      description: 触发限流（连续输错主密码 5 次锁定 1 分钟）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: LOCKED
+            message: 连续输错 5 次，已锁定 1 分钟
+    PayloadTooLarge:
+      description: 上传文件过大
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: CSV 缺列或字段格式错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: CSV_FORMAT_ERROR
+            message: CSV 模板不匹配
+    InternalError:
+      description: 服务端异常
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: INTERNAL_ERROR
+            message: 服务端异常

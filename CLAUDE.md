@@ -13,6 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 权威文档（唯一事实来源）
 
 - `DesignDocument/密码管理App_需求规格说明书.md`（当前 v0.4）—— 产品需求的唯一规范，开发与验收均以此为准。
+- `DesignDocument/features/*.feature` —— Gherkin 验收用例（对应 FR-1 ~ FR-12，覆盖正向/负向/异常/边界）。
+- `DesignDocument/openapi.yaml` —— 未来后端预留 OpenAPI 3.0 契约（当前纯本地、无服务端，仅作预留设计）。
 
 文档结构要点（便于快速定位）：
 
@@ -39,6 +41,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 约定
 
 - 每进行一次修改，就提交一次本地 git（`git add` + `git commit`），不需要推送远程。
+- 设计阶段相关产物（需求文档、feature、API 契约等）统一存放在 `DesignDocument/` 目录下。
 - 需求文档是规范：任何需求变更都必须同步更新该文档，并在 §14 变更记录中追加一行（含版本号、日期、变更内容、确认人）。
 - 文档内所有验收标准为 Gherkin 格式、所有不确定项需标注 `[待确认]`；两者均为该文档的既定风格，改动时保持一致。
 - 当后续真正开始写代码、引入构建/测试工具时，需要回来补全本文件的构建、测试与运行命令。
