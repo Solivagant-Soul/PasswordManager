@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目当前状态
 
-本仓库目前处于**需求/设计阶段，尚无任何代码**。唯一的仓库产物是一份需求规格说明书。
+本仓库目前处于**需求/设计阶段，尚无任何代码**。仓库产物集中存放在 `DesignDocument/` 目录（需求、验收用例、契约、方案等文档）。
 
 - 没有源码目录、没有构建/测试/Lint 命令、没有依赖清单、没有工程配置。
 - 不要臆造或假设存在任何技术栈、框架、构建系统或目录结构。
@@ -16,6 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `DesignDocument/features/*.feature` —— Gherkin 验收用例（对应 FR-1 ~ FR-12，覆盖正向/负向/异常/边界）。
 - `DesignDocument/openapi.yaml` —— 未来后端预留 OpenAPI 3.0 契约（当前纯本地、无服务端，仅作预留设计）。
 - `DesignDocument/架构视图.md` —— Mermaid 架构视图（系统上下文图、组件图、解锁与找回流程图）。
+- `DesignDocument/技术方案.md`（当前 v0.3）—— 技术选型、分层架构、数据模型、内部接口、任务拆解、风险与架构决策记录。
+- `DesignDocument/技术方案评审意见.md` —— 技术方案评审记录（含 B1/S1/S2/S3 等问题的处置）。
 
 文档结构要点（便于快速定位）：
 
