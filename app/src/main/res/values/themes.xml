@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 项目仅需 NoActionBar 主题；视觉由 MaterialTheme 在代码中定义 -->
+    <style name="Theme.PasswordManager" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
