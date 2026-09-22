@@ -4,11 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目当前状态
 
-本仓库目前处于**需求/设计阶段，尚无任何代码**。仓库产物集中存放在 `DesignDocument/` 目录（需求、验收用例、契约、方案等文档）。
+需求/设计阶段已完成，代码阶段已启动：Android 工程位于仓库根目录，`DesignDocument/` 为设计文档目录。
 
-- 没有源码目录、没有构建/测试/Lint 命令、没有依赖清单、没有工程配置。
-- 不要臆造或假设存在任何技术栈、框架、构建系统或目录结构。
-- 若要推导技术方案，先与用户确认，而非直接按常见习惯假设。
+- 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，当前进度：T01 已完成）。
+- 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
+- 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
+
+## 构建与验证命令
+
+```bash
+./gradlew :app:assembleDebug       # 构建 Debug APK
+./gradlew :app:testDebugUnitTest   # JVM 单元测试
+./gradlew :app:lintDebug           # Android Lint
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug   # 任务验收全套（T01 同款）
+```
 
 ## 权威文档（唯一事实来源）
 
@@ -47,4 +56,3 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 设计阶段相关产物（需求文档、feature、API 契约等）统一存放在 `DesignDocument/` 目录下。
 - 需求文档是规范：任何需求变更都必须同步更新该文档，并在 §14 变更记录中追加一行（含版本号、日期、变更内容、确认人）。
 - 文档内所有验收标准为 Gherkin 格式、所有不确定项需标注 `[待确认]`；两者均为该文档的既定风格，改动时保持一致。
-- 当后续真正开始写代码、引入构建/测试工具时，需要回来补全本文件的构建、测试与运行命令。
