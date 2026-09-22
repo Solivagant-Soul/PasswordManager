@@ -49,6 +49,8 @@ dependencies {
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    // Argon2id 纯 JVM 实现（D3）；只用轻量 API、不注册 Provider，避开 Android 平台 BC 冲突
+    implementation(libs.bouncycastle.bcprov)
     // SQLCipher：整库加密，库密钥 = DEK（方案 §4.2）；net.zetetic 新坐标（mavenCentral）
     implementation(libs.sqlcipher.android)
     // Header/备份的 JSON 序列化（D5：自定义加密 JSON）
