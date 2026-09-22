@@ -28,4 +28,8 @@ dependencies {
     implementation(project(":core"))
 
     testImplementation(libs.junit)
+    // T04 测试脚手架
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

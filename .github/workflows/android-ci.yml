@@ -20,6 +20,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # T01 验收：空壳可构建 + CI 跑 lint/单测
+      # T04：全模块构建 + lint + 全部 JVM 单测
       - name: Build & Verify
-        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+        run: ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :core:test :domain:test :data:testDebugUnitTest :platform:testDebugUnitTest

@@ -17,6 +17,9 @@ sqlcipher = "4.6.1"
 serializationJson = "1.7.3"
 androidTestJunit = "1.2.1"
 androidTestRunner = "1.6.2"
+mockk = "1.13.12"
+turbine = "1.1.0"
+robolectric = "4.14.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +39,10 @@ sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidTestJunit" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidTestRunner" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

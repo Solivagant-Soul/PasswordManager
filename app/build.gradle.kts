@@ -63,6 +63,9 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // 单测（T01 占位；完整测试栈 MockK/Turbine/Robolectric 见 T04）
+    // 单测（T04 脚手架：MockK/Turbine/coroutines-test；Robolectric 仅 :data 需要）
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

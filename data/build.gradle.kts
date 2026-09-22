@@ -26,6 +26,16 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests {
+            all {
+                // Robolectric 的 android-all 运行时 jar 走阿里云镜像（本机网络对 mavenCentral 大文件不可达）
+                it.systemProperty("robolectric.dependency.repo.url", "https://maven.aliyun.com/repository/public")
+                it.systemProperty("robolectric.dependency.repo.id", "aliyun")
+            }
+        }
+    }
 }
 
 // Room schema 导出入库（迁移基线：schema v1 起每次变更可审、可生成迁移测试）
@@ -47,6 +57,11 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
+    // T04 测试脚手架（Robolectric：JVM 单测中提供真 Android 框架）
+    testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
