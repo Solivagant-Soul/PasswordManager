@@ -43,6 +43,12 @@ android {
 }
 
 dependencies {
+    // 分层模块（T02）：:core 通用件；:domain 领域层（纯 Kotlin）；:data/:platform 为实现层
+    implementation(project(":core"))
+    implementation(project(":domain"))
+    implementation(project(":data"))
+    implementation(project(":platform"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
