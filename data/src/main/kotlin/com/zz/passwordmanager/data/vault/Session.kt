@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** 解锁态会话：持有内存 DEK。T07 由 UnlockVault 创建；lock() 时清零（NFR-S4/T12）。 */
-class Session internal constructor(val dek: ByteArray) {
+class Session internal constructor(internal val dek: ByteArray) {
 
     /** 幂等清零：DEK 字节置 0，会话即作废。 */
     fun clear() {
