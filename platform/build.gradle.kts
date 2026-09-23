@@ -26,10 +26,15 @@ android {
 dependencies {
     implementation(project(":domain"))
     implementation(project(":core"))
+    // 生物识别系统桥（T09）：androidx 统一 API，含 26–29 兼容路径
+    implementation(libs.androidx.biometric)
 
     testImplementation(libs.junit)
     // T04 测试脚手架
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }
