@@ -31,9 +31,12 @@ abstract class VaultDatabase : RoomDatabase() {
          * @param dek 数据加密密钥原始字节——即 SQLCipher 库密钥（32 字节，AES-256 语境）。
          *   T03 由调用方注入；T07 起由解锁会话（主密码解出的 DEK）提供。
          */
-        fun create(context: Context, dek: ByteArray, databaseName: String = "vault.db"): VaultDatabase =
-            Room.databaseBuilder(context, VaultDatabase::class.java, databaseName)
+        fun create(context: Context, dek: ByteArray, databaseName: String = "vault.db"): VaultDatabase {
+            // SQLCipher native 库必须在使用前加载（幂等）；缺失会 UnsatisfiedLinkError
+            System.loadLibrary("sqlcipher")
+            return Room.databaseBuilder(context, VaultDatabase::class.java, databaseName)
                 .openHelperFactory(SupportOpenHelperFactory(dek))
                 .build()
+        }
     }
 }

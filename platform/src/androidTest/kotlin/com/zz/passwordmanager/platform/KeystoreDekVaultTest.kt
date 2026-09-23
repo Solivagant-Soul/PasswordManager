@@ -1,5 +1,6 @@
 package com.zz.passwordmanager.platform
 
+import com.zz.passwordmanager.platform.biometric.KeystoreDekVault
 import android.security.keystore.UserNotAuthenticatedException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertThrows
@@ -21,14 +22,14 @@ class KeystoreDekVaultTest {
     private val dek = ByteArray(32) { it.toByte() }
 
     @Test
-    fun `wrap produces ciphertext with iv prefix`() {
+    fun wrapProducesCiphertextWithIvPrefix() {
         val wrapped = vault.wrap(dek)
 
         assertTrue(wrapped.size > 32 + 12 + 16)
     }
 
     @Test
-    fun `unwrap without authentication is rejected by keystore`() {
+    fun unwrapWithoutAuthenticationIsRejectedByKeystore() {
         val wrapped = vault.wrap(dek)
 
         // 刚生成/未在认证窗口内 → 必须要求用户认证
@@ -36,7 +37,7 @@ class KeystoreDekVaultTest {
     }
 
     @Test
-    fun `wrap round trips after authentication window`() {
+    fun wrapRoundTripsAfterAuthenticationWindow() {
         // 认证后的往返由 UI 层 BiometricPrompt 触发认证窗口后验证；
         // 此处验证 wrap→wrap 产生不同密文（随机 IV）：
         val a = vault.wrap(dek)

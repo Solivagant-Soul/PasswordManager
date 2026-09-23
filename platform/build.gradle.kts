@@ -11,6 +11,9 @@ android {
 
     defaultConfig {
         minSdk = 26 // 与 :app 一致（D1）
+
+        // T09：androidx runner（framework 老 runner 无法加载 AndroidJUnit4，会进程崩溃）
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
