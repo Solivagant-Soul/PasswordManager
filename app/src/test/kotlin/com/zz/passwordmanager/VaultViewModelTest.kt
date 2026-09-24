@@ -293,6 +293,28 @@ class VaultViewModelTest {
         assertEquals("主密码已修改", viewModel.state.first().successMessage)
     }
 
+    /**
+     * 回归（v0.10 实机踩坑）：生物识别解锁成功后必须进入解锁态。
+     *
+     * 此前 `completeBiometricUnlock` 只清了 authenticating 标志，**没写 locked=false**
+     * （主密码那条路径写了），于是指纹验过、会话也建立了，UI 却仍停在解锁屏。
+     * 现 locked 只由 sessionManager.state 的 collector 派生，任何解锁路径都自动生效。
+     */
+    @Test
+    fun `biometric unlock success flips locked state via session collector`() = runTest(dispatcher) {
+        stubSearch()
+        val session = mockk<Session>(relaxed = true)
+        coEvery { unlockWithBiometric(any(), any()) } returns Result.success(session)
+
+        viewModel.completeBiometricUnlock(
+            mockk<com.zz.passwordmanager.data.biometric.BiometricChallenge>(),
+            mockk<javax.crypto.Cipher>(relaxed = true),
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse("会话已建立，UI 应进入解锁态", viewModel.state.first().locked)
+    }
+
     // ---- V1-1 FR-8 自动锁定 ----
 
     @Test

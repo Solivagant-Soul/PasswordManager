@@ -96,9 +96,15 @@ class VaultViewModel @Inject constructor(
         // 锁定以 VaultSessionManager 为单一事实来源：任何路径的锁定（FR-8 自动锁定、
         // 密保找回失败后的锁定等）都要反映到 UI，并清空已解密的数据。
         viewModelScope.launch {
+            // locked **只由这里派生**（VaultSessionManager 是单一事实来源）。
+            // 此前两条解锁路径各自手动写 `locked = false`，而生物识别那条漏了，
+            // 结果指纹验过了却不进首页（v0.10 实机踩坑）。收敛到单一写点。
             sessionManager.state.collect { vaultState ->
-                // 初值即 Locked，用 !locked 守卫避免初始化时把状态清一遍
-                if (vaultState is VaultState.Locked && !_state.value.locked) applyLocked()
+                when (vaultState) {
+                    // 初值即 Locked，用 !locked 守卫避免初始化时把状态清一遍
+                    is VaultState.Locked -> if (!_state.value.locked) applyLocked()
+                    is VaultState.Unlocked -> _state.update { it.copy(locked = false) }
+                }
             }
         }
     }
@@ -201,7 +207,7 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch {
             unlockWithBiometric(challenge, authenticatedCipher).fold(
                 onSuccess = { session ->
-                    sessionManager.begin(session)
+                    sessionManager.begin(session) // locked 由 collector 派生
                     _state.update { it.copy(biometricAuthenticating = false) }
                     search(_state.value.query)
                 },
@@ -347,8 +353,7 @@ class VaultViewModel @Inject constructor(
             try {
                 unlockVault(password.toCharArray()).fold(
                     onSuccess = { session ->
-                        sessionManager.begin(session)
-                        _state.update { it.copy(locked = false) }
+                        sessionManager.begin(session) // locked 由 collector 派生
                         search(_state.value.query)
                     },
                     onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
