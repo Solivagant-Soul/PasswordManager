@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 /** T13 DAO：搜索/过滤/计数/标签深化（M2）；T03 的基础读写保留。 */
 @Dao
@@ -34,6 +35,22 @@ interface EntryDao {
     )
     suspend fun search(query: String, categoryId: String?): List<EntryRow>
 
+    /**
+     * 列表/搜索的**响应式**版本（T48/FR-18）。
+     *
+     * Room 会在 `entries` 表发生任何写入后自动重新发射——因此新增/编辑/删除条目
+     * 无需显式通知，列表自然更新。此前 VM 用 `search(...).first()` 一次性取值
+     * 再手动 `refresh()`，跨页面变更不会自动反映。
+     */
+    @Query(
+        "SELECT id, title, username, url, categoryId FROM entries " +
+            "WHERE (:query = '' OR titleLower LIKE '%' || :query || '%' " +
+            "OR usernameLower LIKE '%' || :query || '%' OR urlLower LIKE '%' || :query || '%') " +
+            "AND (:categoryId IS NULL OR categoryId = :categoryId) " +
+            "ORDER BY titleLower",
+    )
+    fun observe(query: String, categoryId: String?): Flow<List<EntryRow>>
+
     @Query("SELECT COUNT(*) FROM entries")
     suspend fun countForLimit(): Int
 
@@ -48,6 +65,18 @@ interface EntryDao {
             "ORDER BY e.titleLower",
     )
     suspend fun searchByTag(tag: String, categoryId: String?, query: String): List<EntryRow>
+
+    /** 标签过滤的响应式版本（FR-18）。 */
+    @Query(
+        "SELECT e.id, e.title, e.username, e.url, e.categoryId FROM entries e " +
+            "JOIN entry_tags t ON e.id = t.entryId " +
+            "WHERE t.tagName = :tag " +
+            "AND (:categoryId IS NULL OR e.categoryId = :categoryId) " +
+            "AND (:query = '' OR e.titleLower LIKE '%' || :query || '%' " +
+            "OR e.usernameLower LIKE '%' || :query || '%' OR e.urlLower LIKE '%' || :query || '%') " +
+            "ORDER BY e.titleLower",
+    )
+    fun observeByTag(tag: String, categoryId: String?, query: String): Flow<List<EntryRow>>
 }
 
 /** 列表/搜索投影（不含密码密文——列表场景无需解密）。 */

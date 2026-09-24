@@ -3,7 +3,10 @@ package com.zz.passwordmanager.data.db
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -94,5 +97,28 @@ class EntryDaoTest {
 
         assertTrue(entryTagDao.tagsFor("e1").isEmpty())
         assertEquals("work", tagDao.listAll().single().name) // 标签保留（分类回退语义一致）
+    }
+
+    /**
+     * T48/FR-18 回归：写入后 `observe` **自动**重发，无需显式刷新。
+     * 这是「列表实时更新」的数据层保证——上层的 Flow 订阅靠它成立。
+     */
+    @Test
+    fun observeEmitsAgainAfterWrite() = runBlocking {
+        val emissions = mutableListOf<Int>()
+        val job = launch(Dispatchers.Unconfined) {
+            entryDao.observe("", null).collect { emissions += it.size }
+        }
+        // 订阅已在 Unconfined 上立即开始，等首值到达
+        while (emissions.isEmpty()) yield()
+        assertEquals(0, emissions.last())
+
+        entryDao.upsert(entry("e1", "A"))
+
+        // Room 在事务提交后重发，无需任何显式通知
+        while (emissions.size < 2) yield()
+        assertEquals(1, emissions.last())
+
+        job.cancel()
     }
 }

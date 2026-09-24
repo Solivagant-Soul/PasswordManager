@@ -10,6 +10,7 @@ import com.zz.passwordmanager.data.db.VaultDatabase
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
 import com.zz.passwordmanager.data.header.KdfParams
 import com.zz.passwordmanager.data.vault.Session
+import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultLockedException
 import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.domain.entries.EntryInput
@@ -21,6 +22,8 @@ import io.mockk.mockk
 import io.mockk.slot
 import java.security.SecureRandom
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
@@ -37,8 +40,10 @@ class EntryRepositoryImplTest {
 
     private val dek = ByteArray(32) { it.toByte() }
     private val session = Session(dek)
+    // T48 起 search 走 `sessionManager.state`（响应式），需要同时提供 state 与 requireUnlocked
     private val sessionManager: VaultSessionManager = mockk {
         every { requireUnlocked() } returns session
+        every { state } returns MutableStateFlow(VaultState.Unlocked(session))
     }
     private val entryDao: EntryDao = mockk(relaxed = true)
     private val tagDao: TagDao = mockk(relaxed = true)
@@ -187,9 +192,10 @@ class EntryRepositoryImplTest {
 
     @Test
     fun `search normalizes query and maps rows to summaries`() = runTest {
-        coEvery {
-            entryDao.search("site", null)
-        } returns listOf(EntryRow("e1", "Site", "u", "https://x", null))
+        // T48：search 走响应式的 observe
+        every {
+            entryDao.observe("site", null)
+        } returns flowOf(listOf(EntryRow("e1", "Site", "u", "https://x", null)))
 
         val summaries = repository.search("SiTe", null, null).first()
 

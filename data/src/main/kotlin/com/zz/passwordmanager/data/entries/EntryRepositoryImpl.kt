@@ -2,10 +2,12 @@ package com.zz.passwordmanager.data.entries
 
 import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.EntryEntity
+import com.zz.passwordmanager.data.db.EntryRow
 import com.zz.passwordmanager.data.db.EntryTagEntity
 import com.zz.passwordmanager.data.db.TagEntity
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
 import com.zz.passwordmanager.data.vault.VaultSessionManager
+import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryIssue
@@ -16,8 +18,10 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /**
@@ -37,17 +41,27 @@ class EntryRepositoryImpl(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : EntryRepository {
 
+    /**
+     * 响应式列表（T48/FR-18）：Room 在 `entries` 写入后自动重发查询，
+     * 因此增删改条目无需显式通知，列表自然更新。
+     *
+     * 锁定态用 [flatMapLatest] 换成空序列而不是抛异常：锁定时 [applyLocked] 已经在
+     * 清理 UI 状态，这里只需停止供数，不必把 VaultLockedException 抛给收集协程。
+     */
     override fun search(query: String, categoryId: String?, tag: String?): Flow<List<EntrySummary>> =
-        flow {
-            val dek = sessionManager.requireUnlocked().dek // 摘要不含密码，但锁定态整体挡在门外（BR-7）
-            val db = dbProvider.get(dek)
-            val normalized = query.trim().lowercase()
-            val rows = if (tag != null) {
-                db.entryDao().searchByTag(tag.trim().lowercase(), categoryId, normalized)
+        sessionManager.state.flatMapLatest { vaultState: VaultState ->
+            if (vaultState !is VaultState.Unlocked) {
+                flowOf(emptyList<EntrySummary>())
             } else {
-                db.entryDao().search(normalized, categoryId)
+                val db = dbProvider.get(vaultState.session.dek)
+                val normalized = query.trim().lowercase()
+                val rows = if (tag != null) {
+                    db.entryDao().observeByTag(tag.trim().lowercase(), categoryId, normalized)
+                } else {
+                    db.entryDao().observe(normalized, categoryId)
+                }
+                rows.map { list: List<EntryRow> -> list.map { it.toSummary() } }
             }
-            emit(rows.map { it.toSummary() })
         }.flowOn(ioDispatcher)
 
     override suspend fun get(id: String): EntryDetail? = withContext(ioDispatcher) {

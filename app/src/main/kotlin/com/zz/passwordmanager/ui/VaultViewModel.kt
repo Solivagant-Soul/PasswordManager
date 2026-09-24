@@ -32,6 +32,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -59,6 +61,12 @@ data class VaultUiState(
     val recovering: Boolean = false,
     /** 密保问题文本（仅问题，答案从不落盘 D4）。 */
     val recoveryQuestions: List<String> = emptyList(),
+    /** 当前分类筛选（null = 全部）。 */
+    val categoryFilter: String? = null,
+    /** 标签筛选（null = 全部）。 */
+    val tagFilter: String? = null,
+    /** 仅看收藏。 */
+    val favoritesOnly: Boolean = false,
     /** FR-2 生物识别是否已开启（设置页开关读它；不含硬件就绪判断）。 */
     val biometricEnabled: Boolean = false,
     /** FR-2 生物识别快捷解锁入口是否可用（已开启且硬件就绪）。 */
@@ -119,6 +127,7 @@ class VaultViewModel @Inject constructor(
      * - `vaultCorrupted` **不动**：损坏态与锁定态正交，清掉会让「清除重建」入口消失。
      */
     private fun applyLocked() {
+        listJob?.cancel() // 锁定即停止订阅，不再从库里取数
         details.clear()
         _state.update {
             it.copy(locked = true, entries = emptyList(), revealed = emptyMap(), errorMessage = null)
@@ -209,7 +218,7 @@ class VaultViewModel @Inject constructor(
                 onSuccess = { session ->
                     sessionManager.begin(session) // locked 由 collector 派生
                     _state.update { it.copy(biometricAuthenticating = false) }
-                    search(_state.value.query)
+                    startObservingEntries()
                 },
                 onFailure = { e -> finishBiometric(e) },
             )
@@ -354,7 +363,7 @@ class VaultViewModel @Inject constructor(
                 unlockVault(password.toCharArray()).fold(
                     onSuccess = { session ->
                         sessionManager.begin(session) // locked 由 collector 派生
-                        search(_state.value.query)
+                        startObservingEntries()
                     },
                     onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
                 )
@@ -384,6 +393,7 @@ class VaultViewModel @Inject constructor(
 
     private val details = mutableStateMapOf<String, EntryDetail?>()
     private var pendingBiometricEnable: BiometricToggle.EnableSetup? = null
+    private var listJob: Job? = null
 
     /** 详情/编辑页的数据源：AppNav 经 [detailFor] 观察。 */
     fun detailFor(id: String): EntryDetail? = details[id]
@@ -398,17 +408,42 @@ class VaultViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 搜索条件变更（T48/FR-18）。
+     *
+     * 只改条件，不直接查库——列表由 [startObservingEntries] 订阅的 Flow 驱动。
+     */
     fun search(query: String) {
         _state.update { it.copy(query = query) }
-        viewModelScope.launch {
+        applyFilters()
+    }
+
+    /** 列表筛选条件（分类 / 收藏）。取 null = 全部。 */
+    fun filterByCategory(categoryId: String?) = applyFilters()
+
+    fun filterByFavoritesOnly(onlyFavorites: Boolean) = applyFilters()
+
+    private fun applyFilters() {
+        val s = _state.value
+        listJob?.cancel()
+        listJob = viewModelScope.launch {
             try {
-                val entries = entryRepository.search(query, null, null).first()
-                _state.update { it.copy(entries = entries) }
+                entryRepository.search(s.query, s.categoryFilter, s.tagFilter).collect { entries ->
+                    _state.update { it.copy(entries = entries) }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = userMessage(e)) }
             }
         }
     }
+
+    /**
+     * 启动列表订阅（T48）。在解锁成功后调用——列表由 Room Flow 驱动，
+     * 增删改条目会自动反映，无需手动 refresh。
+     */
+    private fun startObservingEntries() = applyFilters()
 
     // ---- 详情 / 显隐 / 复制（FR-9 / T17） ----
 

@@ -1,5 +1,6 @@
 package com.zz.passwordmanager.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +37,13 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
     // 锁定时连回退栈一并清空，避免解锁后落回旧页面。
     LaunchedEffect(state.locked) {
         if (state.locked && backStack.size > 1) backStack.removeAll { it != Screen.List }
+    }
+
+    // T49 系统返回键：此前全项目没有 BackHandler，在详情/编辑页按返回键会**直接退出 App**，
+    // 跳过手写栈。栈深为 1 时不接管，交回系统默认行为（退出应用）——
+    // 与设计稿「返回键逻辑自然」一致。
+    BackHandler(enabled = backStack.size > 1) {
+        backStack.removeAt(backStack.lastIndex)
     }
 
     if (state.locked || !state.initialized) {
