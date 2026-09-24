@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑与批次划分见 §9）。
 - **当前进度：M0–M2 + v1 成品冲刺已完成（T01–T19，代码已交付）**。v1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
-- **下一批：V2 功能增强（T32–T47，尚未开工）**——基于设计稿截图的新增需求：分类/收藏/条目类型、安全中心、生成器强度、四标签导航、设置项。技术设计见 `技术方案.md` §10，处置依据见 `设计文档/功能点提取与处置清单.md`。
+- **下一批：V2 功能增强（T32–T47，尚未开工）**——基于设计稿截图的新增需求：分类/收藏/条目类型、安全中心、生成器强度、四标签导航、设置项。技术设计见 `技术方案.md` §10，处置依据见 `DesignDocument/功能点提取与处置清单.md`。
+- **已知待修缺口**（V2 任务中处理）：列表非响应式（`search()` 用 `.first()`，跨页面变更需手动刷新）；**全项目无 `BackHandler`，详情页按返回键直接退出 App**。
 - **交付形态：个人自用 APK**（不上应用商店，故无隐私政策与商店合规）。自签证书已生成于**仓库外** `F:/Python_file/ai_coding/tools/keystore/`（`vault-release.jks` + `credentials.properties`），出包命令见下方「构建与验证命令」。证书口令**不入库、不外传**；丢了它就无法再给本 App 出可覆盖升级的包，只能卸载重装。
 - 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
 - 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
