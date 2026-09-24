@@ -22,6 +22,19 @@ interface EntryDao {
     @Query("DELETE FROM entries WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    /** 只改收藏位（FR-5）：不解密密码，不动其他列。 */
+    @Query("UPDATE entries SET favorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(id: String, favorite: Boolean)
+
+    /**
+     * 删除分类前先清引用（T34）。更新的是 `entries` 表，故归 EntryDao。
+     *
+     * `entries.categoryId` **没有外键**，不会自动回退——必须显式置 null，
+     * 否则删除分类后会留下指向不存在分类的孤儿引用，按分类筛选时行为不可预期。
+     */
+    @Query("UPDATE entries SET categoryId = NULL WHERE categoryId = :categoryId")
+    suspend fun clearCategory(categoryId: String)
+
     /**
      * 列表/搜索（投影不含密文；M4 大小写不敏感经归一化列实现）。
      * 包含式 LIKE 在 5000 条规模为有限全表扫描（索引服务等值/前缀与排序）。
@@ -101,6 +114,10 @@ interface CategoryDao {
 
     @Query("SELECT COUNT(*) FROM entries WHERE categoryId = :categoryId")
     suspend fun entryCountFor(categoryId: String): Int
+
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao

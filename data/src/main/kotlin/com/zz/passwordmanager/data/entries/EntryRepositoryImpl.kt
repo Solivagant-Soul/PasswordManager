@@ -160,6 +160,18 @@ class EntryRepositoryImpl(
         Result.success(Unit)
     }
 
+    override suspend fun setFavorite(id: String, favorite: Boolean): Result<Unit> =
+        withContext(ioDispatcher) {
+            val db = dbProvider.get(sessionManager.requireUnlocked().dek)
+            if (db.entryDao().getById(id) == null) {
+                return@withContext Result.failure(
+                    EntryRepositoryException(EntryRepositoryException.Reason.NOT_FOUND),
+                )
+            }
+            db.entryDao().setFavorite(id, favorite)
+            Result.success(Unit)
+        }
+
     override suspend fun delete(id: String): Result<Unit> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
         dbProvider.get(dek).entryDao().deleteById(id) // entry_tags 经外键 CASCADE 清理

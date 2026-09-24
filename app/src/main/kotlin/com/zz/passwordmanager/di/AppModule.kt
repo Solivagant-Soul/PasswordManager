@@ -6,6 +6,7 @@ import com.zz.passwordmanager.data.biometric.UnlockWithBiometric
 import com.zz.passwordmanager.data.crypto.Argon2KeyManager
 import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
+import com.zz.passwordmanager.data.entries.CategoryRepository
 import com.zz.passwordmanager.data.entries.EntryRepositoryImpl
 import com.zz.passwordmanager.data.header.KdfParams
 import com.zz.passwordmanager.data.header.VaultHeaderStore
@@ -149,6 +150,13 @@ object AppModule {
         dekStore: BiometricDekStore,
         gate: BiometricGate,
     ): UnlockWithBiometric = UnlockWithBiometric(store, throttle, dekStore, gate)
+
+    @Provides
+    @Singleton
+    fun provideCategoryRepository(
+        provider: VaultDatabaseProvider,
+        sessionManager: VaultSessionManager,
+    ): CategoryRepository = CategoryRepository(provider, sessionManager)
 
     @Provides
     @Singleton

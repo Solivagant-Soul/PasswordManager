@@ -69,6 +69,15 @@ interface EntryRepository {
 
     suspend fun update(id: String, input: EntryInput): Result<Unit>
 
+    /**
+     * 只切换收藏位（FR-5）。
+     *
+     * **不复用 [update]**：那会把密码字段也写一遍，而 UI 手里没有明文密码
+     * （编辑时留空表示不改动，空值又会被校验拒绝），且明文不该为了改个星标
+     * 而在 UI 层绕一圈。单列更新由 DAO 直接完成，不解密、不碰密码。
+     */
+    suspend fun setFavorite(id: String, favorite: Boolean): Result<Unit>
+
     /** 永久删除（UI 负责二次确认，FR-3）；条目关联标签随外键级联清理。 */
     suspend fun delete(id: String): Result<Unit>
 
@@ -84,3 +93,9 @@ class EntryRepositoryException(val reason: Reason, val issues: List<EntryIssue> 
 }
 
 data class EntryIssue(val field: String, val message: String)
+
+/**
+ * 分类（T34/FR-5）：**单选**，作为列表的筛选维度。
+ * 与标签（多选、归类维度）互补——见需求 §13.0 C6。
+ */
+data class Category(val id: String, val name: String)

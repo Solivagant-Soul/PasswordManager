@@ -21,6 +21,8 @@ import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultStatus
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 import com.zz.passwordmanager.domain.biometric.BiometricGate
+import com.zz.passwordmanager.data.entries.CategoryRepository
+import com.zz.passwordmanager.domain.entries.Category
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryRepository
@@ -61,6 +63,8 @@ data class VaultUiState(
     val recovering: Boolean = false,
     /** 密保问题文本（仅问题，答案从不落盘 D4）。 */
     val recoveryQuestions: List<String> = emptyList(),
+    /** 全部分类（列表 chips 用）。 */
+    val categories: List<Category> = emptyList(),
     /** 当前分类筛选（null = 全部）。 */
     val categoryFilter: String? = null,
     /** 标签筛选（null = 全部）。 */
@@ -91,6 +95,7 @@ class VaultViewModel @Inject constructor(
     private val biometricToggle: BiometricToggle,
     private val gate: BiometricGate,
     private val entryRepository: EntryRepository,
+    private val categoryRepository: CategoryRepository,
     private val clipboard: AndroidClipboardBridge,
     private val sessionManager: VaultSessionManager,
     private val status: VaultStatus,
@@ -413,23 +418,45 @@ class VaultViewModel @Inject constructor(
      *
      * 只改条件，不直接查库——列表由 [startObservingEntries] 订阅的 Flow 驱动。
      */
-    fun search(query: String) {
+    fun search(query: String) = queryChanged(query)
+
+    /**
+     * 分类 chips 选中；再点同一档则取消筛选（回到「全部」）。
+     * 「收藏」与分类互斥——单选一档（需求 §6.5）。
+     */
+    fun filterByCategory(categoryId: String?) {
+        val s = _state.value
+        val next = if (!s.favoritesOnly && s.categoryFilter == categoryId) null else categoryId
+        _state.update { it.copy(categoryFilter = next, favoritesOnly = false) }
+        applyFilters()
+    }
+
+    /** 「收藏」档：再点一次取消。与分类互斥。 */
+    fun filterByFavoritesOnly() {
+        val next = !_state.value.favoritesOnly
+        _state.update { it.copy(favoritesOnly = next, categoryFilter = null) }
+        applyFilters()
+    }
+
+    /** 搜索输入变化时保留当前筛选档。 */
+    fun queryChanged(query: String) {
         _state.update { it.copy(query = query) }
         applyFilters()
     }
 
-    /** 列表筛选条件（分类 / 收藏）。取 null = 全部。 */
-    fun filterByCategory(categoryId: String?) = applyFilters()
-
-    fun filterByFavoritesOnly(onlyFavorites: Boolean) = applyFilters()
-
     private fun applyFilters() {
         val s = _state.value
+        // 「收藏」是独立筛选档：与分类互斥，且不是 DAO 条件——
+        // 收藏是 entries 的一列，但 chips 语义上与分类并列，故单独处理
+        val categoryId = if (s.favoritesOnly) null else s.categoryFilter
         listJob?.cancel()
         listJob = viewModelScope.launch {
             try {
-                entryRepository.search(s.query, s.categoryFilter, s.tagFilter).collect { entries ->
-                    _state.update { it.copy(entries = entries) }
+                entryRepository.search(s.query, categoryId, s.tagFilter).collect { rows ->
+                    _state.update {
+                        val filtered = if (s.favoritesOnly) rows.filter { it.favorite } else rows
+                        it.copy(entries = filtered)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -439,11 +466,61 @@ class VaultViewModel @Inject constructor(
         }
     }
 
+    /** 加载分类列表（解锁后调用，chips 需要）。 */
+    private fun loadCategories() {
+        viewModelScope.launch {
+            runCatching { categoryRepository.list() }
+                .onSuccess { list -> _state.update { it.copy(categories = list) } }
+                .onFailure { e -> _state.update { it.copy(errorMessage = userMessage(e)) } }
+        }
+    }
+
+    /**
+     * 切换收藏（FR-5）。列表与详情两处入口共用；
+     * 保存后由 Room Flow 自动重发，两屏同时刷新，无需手动通知。
+     */
+    fun toggleFavorite(id: String, favorite: Boolean) {
+        viewModelScope.launch {
+            entryRepository.setFavorite(id, favorite)
+                .onFailure { e -> _state.update { it.copy(errorMessage = userMessage(e)) } }
+        }
+    }
+
+    // ---- 分类管理（T34） ----
+
+    fun upsertCategory(id: String?, name: String) {
+        viewModelScope.launch {
+            val newId = id ?: java.util.UUID.randomUUID().toString()
+            categoryRepository.upsert(newId, name).fold(
+                onSuccess = { loadCategories() },
+                onFailure = { e -> _state.update { it.copy(errorMessage = categoryMessage(e)) } },
+            )
+        }
+    }
+
+    fun deleteCategory(id: String) {
+        viewModelScope.launch {
+            categoryRepository.delete(id).fold(
+                onSuccess = {
+                    // 当前正在看被删的分类 → 回到「全部」，否则 chips 选中态悬空
+                    if (_state.value.categoryFilter == id) {
+                        _state.update { it.copy(categoryFilter = null) }
+                    }
+                    loadCategories()
+                },
+                onFailure = { e -> _state.update { it.copy(errorMessage = categoryMessage(e)) } },
+            )
+        }
+    }
+
     /**
      * 启动列表订阅（T48）。在解锁成功后调用——列表由 Room Flow 驱动，
      * 增删改条目会自动反映，无需手动 refresh。
      */
-    private fun startObservingEntries() = applyFilters()
+    private fun startObservingEntries() {
+        applyFilters()
+        loadCategories()
+    }
 
     // ---- 详情 / 显隐 / 复制（FR-9 / T17） ----
 

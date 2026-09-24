@@ -34,6 +34,15 @@ enum class EntryType {
         BANK_CARD, DOCUMENT -> mask(username)
     }
 
+    /** 中文显示名（详情页/编辑页用）。 */
+    val displayName: String
+        get() = when (this) {
+            ACCOUNT -> "账号"
+            BANK_CARD -> "银行卡"
+            WIFI -> "WiFi"
+            DOCUMENT -> "证件"
+        }
+
     /** 卡片类类型是否需要掩码——列表渲染据此决定是否要「显示/隐藏」副标题。 */
     val needsMasking: Boolean
         get() = this == BANK_CARD || this == DOCUMENT

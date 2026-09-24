@@ -1,6 +1,7 @@
 package com.zz.passwordmanager
 
 import com.zz.passwordmanager.data.biometric.BiometricToggle
+import com.zz.passwordmanager.data.entries.CategoryRepository
 import com.zz.passwordmanager.data.biometric.UnlockWithBiometric
 import com.zz.passwordmanager.data.header.HeaderIntegrityException
 import com.zz.passwordmanager.data.vault.ChangeMasterPassword
@@ -58,6 +59,7 @@ class VaultViewModelTest {
     private val biometricToggle: BiometricToggle = mockk(relaxed = true)
     private val gate: BiometricGate = mockk { every { availability() } returns BiometricGate.Availability.AVAILABLE }
     private val repository: EntryRepository = mockk()
+    private val categoryRepository: CategoryRepository = mockk(relaxed = true)
     private val clipboard: AndroidClipboardBridge = mockk(relaxed = true)
     // V1-1：VM 现在在 init 里 collect sessionManager.state。relaxed mock 的 state
     // 拿不到可 collect 的 StateFlow，会让 collector 崩——改用真实实例（纯 Kotlin，无 Android 依赖）。
@@ -77,7 +79,7 @@ class VaultViewModelTest {
             unlockVault, initializeVault, destroyVault, resetVault,
             changeMasterPassword, readSecurityQuestions,
             unlockWithBiometric, biometricToggle, gate,
-            repository, clipboard, sessionManager, status,
+            repository, categoryRepository, clipboard, sessionManager, status,
         )
     }
 
@@ -221,7 +223,7 @@ class VaultViewModelTest {
             unlockVault, initializeVault, destroyVault, resetVault,
             changeMasterPassword, readSecurityQuestions,
             unlockWithBiometric, biometricToggle, gate,
-            repository, clipboard, sessionManager, status,
+            repository, categoryRepository, clipboard, sessionManager, status,
         )
         stubSearch()
         coEvery { initializeVault(any()) } returns Result.success(Unit)

@@ -1,6 +1,7 @@
 package com.zz.passwordmanager.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,9 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.domain.entries.EntryDetail
+import com.zz.passwordmanager.domain.entries.EntryType
 
 /**
  * 条目详情（FR-3/FR-9）：掩码显隐 + 复制；离开页面立即隐藏明文（T17「明文不残留」）。
@@ -36,6 +39,7 @@ fun EntryDetailScreen(
     onCopy: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
+    onToggleFavorite: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     // T17：离开详情页时立即清除内存中的明文（明文不残留）
@@ -53,9 +57,25 @@ fun EntryDetailScreen(
             return@Column
         }
 
-        Text(text = detail.title, style = MaterialTheme.typography.headlineSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(text = detail.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            // FR-5 收藏：详情页可直接切换，不必回列表
+            TextButton(onClick = { onToggleFavorite(!detail.favorite) }) {
+                Text(if (detail.favorite) "★ 已收藏" else "☆ 收藏")
+            }
+        }
         Spacer(Modifier.height(8.dp))
-        Text(text = "用户名：${detail.username}")
+        // FR-15：账号/银行卡/WiFi/证件，副标题的掩码策略不同
+        val subtitle = detail.type.subtitle(detail.username)
+        if (subtitle.isNotBlank()) {
+            Text(
+                text = if (detail.type == EntryType.BANK_CARD || detail.type == EntryType.DOCUMENT) {
+                    "${detail.type.displayName}：$subtitle"
+                } else {
+                    "${detail.type.displayName}：$subtitle"
+                },
+            )
+        }
         if (detail.url?.isNotEmpty() == true) Text(text = "网址：${detail.url}")
         if (detail.notes?.isNotEmpty() == true) Text(text = "备注：${detail.notes}")
         if (detail.tags.isNotEmpty()) Text(text = "标签：${detail.tags.joinToString()}")

@@ -66,8 +66,11 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
         Screen.List -> {
             EntryListScreen(
                 state = state,
+                categories = state.categories,
                 errorMessage = state.errorMessage,
                 onQueryChange = viewModel::search,
+                onSelectCategory = viewModel::filterByCategory,
+                onSelectFavorites = viewModel::filterByFavoritesOnly,
                 onOpen = { backStack.add(Screen.Detail(it)) },
                 onCreate = { backStack.add(Screen.Edit(null)) },
                 onSettings = { backStack.add(Screen.Settings) },
@@ -80,7 +83,10 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
                 biometricEnabled = state.biometricEnabled,
+                categories = state.categories,
                 onBiometricToggle = biometricToggleAction(viewModel),
+                onUpsertCategory = viewModel::upsertCategory,
+                onDeleteCategory = viewModel::deleteCategory,
                 onRunBiometricDiagnostics = { BiometricDiagnostics.run(appContext).toText() },
                 onChangeMasterPassword = { current, new, confirm ->
                     viewModel.submitMasterPasswordChange(current, new, confirm) {
@@ -105,6 +111,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                     backStack.removeAt(backStack.lastIndex)
                 },
                 onEdit = { backStack.add(Screen.Edit(top.entryId)) },
+                onToggleFavorite = { favorite -> viewModel.toggleFavorite(top.entryId, favorite) },
                 onBack = { backStack.removeAt(backStack.lastIndex) },
             )
         }
@@ -113,6 +120,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
             val existing = rememberDetailState(top.entryId, viewModel)
             EntryEditScreen(
                 existing = existing,
+                categories = state.categories,
                 errorMessage = state.errorMessage,
                 onSave = { input -> viewModel.save(top.entryId, input) { backStack.removeAt(backStack.lastIndex) } },
                 onBack = { backStack.removeAt(backStack.lastIndex) },

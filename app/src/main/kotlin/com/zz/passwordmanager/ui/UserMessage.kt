@@ -1,5 +1,6 @@
 package com.zz.passwordmanager.ui
 
+import com.zz.passwordmanager.data.entries.CategoryException
 import com.zz.passwordmanager.data.vault.AuthError
 import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.InitializationError
@@ -21,6 +22,7 @@ internal fun userMessage(e: Throwable): String = when (e) {
         InitializationError.AlreadyInitialized -> "密码库已存在，请直接解锁"
         is InitializationError.Invalid -> invalidMessage(error.issues.map { it.message })
     }
+    is CategoryException -> e.issues.firstOrNull()?.message ?: "分类名不符合要求"
     is EntryRepositoryException -> when (e.reason) {
         EntryRepositoryException.Reason.LIMIT_REACHED -> "条目已达上限（5000 条），请先删除一些"
         EntryRepositoryException.Reason.NOT_FOUND -> "条目不存在或已删除"
@@ -82,4 +84,10 @@ private fun invalidMessage(issues: List<String>): String {
         has("tags") -> "标签最多 20 个"
         else -> "输入不符合要求"
     }
+}
+
+/** 分类相关错误的文案（与条目错误分开，便于 UI 定位到具体表单）。 */
+internal fun categoryMessage(e: Throwable): String = when (e) {
+    is CategoryException -> e.issues.firstOrNull()?.message ?: "分类名不符合要求"
+    else -> userMessage(e)
 }

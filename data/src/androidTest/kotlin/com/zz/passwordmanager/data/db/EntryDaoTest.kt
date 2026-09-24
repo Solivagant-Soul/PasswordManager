@@ -9,6 +9,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -120,5 +122,38 @@ class EntryDaoTest {
         assertEquals(1, emissions.last())
 
         job.cancel()
+    }
+
+    /**
+     * T34 回归：删除分类前必须**先清引用**。
+     *
+     * `entries.categoryId` 没有外键，不会自动回退——若直接删分类行，
+     * 就会留下指向不存在分类的孤儿引用，列表按分类筛选时行为不可预期。
+     * 本用例守住 `clearCategory` 这个显式回退。
+     */
+    @Test
+    fun clearCategoryResetsEntriesToUncategorized() = runBlocking {
+        entryDao.upsert(entry("e1", "A", categoryId = "c1"))
+        entryDao.upsert(entry("e2", "B", categoryId = "c1"))
+
+        entryDao.clearCategory("c1")
+
+        assertNull(entryDao.getById("e1")!!.categoryId)
+        assertNull(entryDao.getById("e2")!!.categoryId)
+        // 条目本身必须保留——删除分类只回退归属，不删数据
+        assertEquals(2, entryDao.count())
+    }
+
+    /** FR-5 收藏：单列更新，不影响其他字段。 */
+    @Test
+    fun setFavoriteOnlyTouchesFavorite() = runBlocking {
+        entryDao.upsert(entry("e1", "A"))
+
+        entryDao.setFavorite("e1", true)
+
+        val stored = entryDao.getById("e1")!!
+        assertTrue(stored.favorite)
+        assertEquals("A", stored.title)
+        assertEquals("ACCOUNT", stored.type)
     }
 }

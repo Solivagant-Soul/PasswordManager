@@ -33,9 +33,12 @@ fun SettingsScreen(
     errorMessage: String?,
     successMessage: String?,
     biometricEnabled: Boolean,
+    categories: List<com.zz.passwordmanager.domain.entries.Category>,
     onRunBiometricDiagnostics: () -> String,
     onChangeMasterPassword: (current: String, new: String, confirm: String) -> Unit,
     onBiometricToggle: (enable: Boolean, masterPassword: String) -> Unit,
+    onUpsertCategory: (String?, String) -> Unit,
+    onDeleteCategory: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     var current by remember { mutableStateOf("") }
@@ -43,6 +46,8 @@ fun SettingsScreen(
     var confirm by remember { mutableStateOf("") }
     var showBiometricPasswordPrompt by remember { mutableStateOf<Boolean?>(null) }
     var diagnosticReport by remember { mutableStateOf<String?>(null) }
+    var newCategory by remember { mutableStateOf("") }
+    var editingCategoryId by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -111,6 +116,52 @@ fun SettingsScreen(
             onClick = { diagnosticReport = onRunBiometricDiagnostics() },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("生物识别诊断") }
+
+        // ---- 分类管理（T34/T35）----
+        Spacer(Modifier.height(24.dp))
+        Text("分类", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "分类用于列表筛选（单选），标签用于归类（多选）",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        categories.forEach { category ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                if (editingCategoryId == category.id) {
+                    OutlinedTextField(
+                        value = newCategory,
+                        onValueChange = { newCategory = it },
+                        label = { Text("分类名") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = {
+                        onUpsertCategory(category.id, newCategory)
+                        editingCategoryId = null; newCategory = ""
+                    }) { Text("保存") }
+                    TextButton(onClick = { editingCategoryId = null }) { Text("取消") }
+                } else {
+                    Text(category.name, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        editingCategoryId = category.id; newCategory = category.name
+                    }) { Text("改名") }
+                    TextButton(onClick = { onDeleteCategory(category.id) }) { Text("删除") }
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newCategory,
+                onValueChange = { newCategory = it },
+                label = { Text("新分类名（1–30 字）") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                enabled = newCategory.isNotBlank(),
+                onClick = { onUpsertCategory(null, newCategory); newCategory = "" },
+            ) { Text("添加") }
+        }
     }
 
     // 诊断结果
