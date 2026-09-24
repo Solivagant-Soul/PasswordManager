@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -13,6 +14,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.domain.entries.EntryDetail
@@ -37,6 +42,8 @@ fun EntryDetailScreen(
     DisposableEffect(Unit) {
         onDispose { onHide() }
     }
+    // BR-5 无回收站，删除不可恢复 → 必须二次确认（实机走查发现此处曾直接删除）
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         TextButton(onClick = onBack) { Text("← 返回") }
@@ -71,8 +78,30 @@ fun EntryDetailScreen(
         Spacer(Modifier.height(24.dp))
         Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text("编辑") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { showDeleteConfirm = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("删除（不可恢复）")
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("删除条目") },
+            text = {
+                Text("将永久删除「${detail?.title ?: ""}」及其全部内容。此操作不可恢复，也没有回收站。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete()
+                }) { Text("确认删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+            },
+        )
     }
 }

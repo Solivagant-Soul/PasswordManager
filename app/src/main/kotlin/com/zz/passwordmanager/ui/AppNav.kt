@@ -10,6 +10,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import com.zz.passwordmanager.AppApplication
+import com.zz.passwordmanager.platform.biometric.BiometricDiagnostics
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zz.passwordmanager.domain.entries.EntryDetail
@@ -26,6 +27,7 @@ sealed interface Screen {
 @Composable
 fun AppNav(viewModel: VaultViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+    val appContext = LocalContext.current
     val backStack: SnapshotStateList<Screen> = remember { mutableStateListOf(Screen.List) }
     val top = backStack.last()
 
@@ -71,6 +73,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 successMessage = state.successMessage,
                 biometricEnabled = state.biometricEnabled,
                 onSetBiometric = viewModel::setBiometricEnabled,
+                onRunBiometricDiagnostics = { BiometricDiagnostics.run(appContext).toText() },
                 onChangeMasterPassword = { current, new, confirm ->
                     viewModel.submitMasterPasswordChange(current, new, confirm) {
                         backStack.removeAt(backStack.lastIndex)
@@ -144,4 +147,14 @@ private fun biometricUnlockAction(viewModel: VaultViewModel): (() -> Unit)? {
             }
         }
     }
+}
+
+/** 诊断报告转可读文本（设置页弹窗直接展示）。 */
+private fun BiometricDiagnostics.Report.toText(): String = buildString {
+    appendLine("设备：$deviceInfo")
+    appendLine("弱认证 WEAK：$weakResult")
+    appendLine("强认证 STRONG：$strongResult")
+    appendLine("Keystore 强认证密钥：$keystoreResult")
+    appendLine()
+    append(conclusion)
 }

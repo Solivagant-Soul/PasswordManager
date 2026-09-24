@@ -33,6 +33,7 @@ fun SettingsScreen(
     errorMessage: String?,
     successMessage: String?,
     biometricEnabled: Boolean,
+    onRunBiometricDiagnostics: () -> String,
     onChangeMasterPassword: (current: String, new: String, confirm: String) -> Unit,
     onSetBiometric: (enable: Boolean, masterPassword: String) -> Unit,
     onBack: () -> Unit,
@@ -41,6 +42,7 @@ fun SettingsScreen(
     var new by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var showBiometricPasswordPrompt by remember { mutableStateOf<Boolean?>(null) }
+    var diagnosticReport by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -104,6 +106,23 @@ fun SettingsScreen(
                 onCheckedChange = { showBiometricPasswordPrompt = it },
             )
         }
+        // 排障入口：开关切不过去时，先看诊断结论再决定是否需要兼容模式
+        TextButton(
+            onClick = { diagnosticReport = onRunBiometricDiagnostics() },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("生物识别诊断") }
+    }
+
+    // 诊断结果
+    diagnosticReport?.let { report ->
+        AlertDialog(
+            onDismissRequest = { diagnosticReport = null },
+            title = { Text("生物识别诊断") },
+            text = { Text(report, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = {
+                TextButton(onClick = { diagnosticReport = null }) { Text("知道了") }
+            },
+        )
     }
 
     // P-03：开关生物识别须验证当前主密码

@@ -1,4 +1,4 @@
-  @phase-2  # 加密备份/导入/CSV 全部移二期（2026-09-24 决策）
+  @phase-2  # 加密备份/导入移二期（2026-09-24）；CSV 导入已彻底删除
 Feature: 导入、导出与备份
   作为用户
   我希望导出加密备份并恢复
@@ -26,25 +26,8 @@ Feature: 导入、导出与备份
     Then 系统提示失败
     But 现有数据不受影响
 
-  @phase-2  # 二期交付（需求 §1.4）
-  Scenario: CSV 导入成功
-    Given 用户已解锁且提供符合模板的 CSV
-    When 用户导入该 CSV
-    Then 系统将条目写入本地密码库
 
-  @phase-2  # 二期交付（需求 §1.4）
-  Scenario: CSV 缺列报错
-    Given 用户尝试导入 CSV
-    When 文件缺列或字段格式错误
-    Then 系统报错并指出问题
-    And 不写入脏数据
 
-  @phase-2  # 二期交付（需求 §1.4）
-  Scenario: CSV 重复条目跳过
-    Given 用户已解锁且 CSV 中存在与现有条目重复的记录
-    When 用户导入该 CSV
-    Then 系统跳过重复条目
-    And 汇总跳过数量
 
   Scenario: 导出过程中断不产生损坏文件
     Given 用户已解锁且正在导出
