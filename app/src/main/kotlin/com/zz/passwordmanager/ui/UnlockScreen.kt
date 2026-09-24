@@ -35,9 +35,21 @@ fun UnlockScreen(
     onInitialize: (UnlockFormData) -> Unit,
     onUnlock: (String) -> Unit,
     onDestroyVault: () -> Unit = {},
+    onBeginRecovery: () -> Unit = {},
+    onRecover: (answers: List<CharArray>, newPassword: String, confirm: String) -> Unit = { _, _, _ -> },
+    onCancelRecovery: () -> Unit = {},
 ) {
     if (state.vaultCorrupted) {
         CorruptedVaultNotice(onDestroyVault = onDestroyVault)
+        return
+    }
+    if (state.recovering) {
+        RecoveryForm(
+            questions = state.recoveryQuestions,
+            errorMessage = errorMessage,
+            onSubmit = onRecover,
+            onCancel = onCancelRecovery,
+        )
         return
     }
 
@@ -86,6 +98,10 @@ fun UnlockScreen(
             Spacer(Modifier.height(8.dp))
             Text(text = it, color = MaterialTheme.colorScheme.error)
         }
+        state.successMessage?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(text = it, color = MaterialTheme.colorScheme.primary)
+        }
 
         Spacer(Modifier.height(16.dp))
         Button(
@@ -102,6 +118,79 @@ fun UnlockScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (state.initialized) "解锁" else "创建")
+        }
+
+        // FR-12 找回入口：仅已初始化时可用（未初始化时无密保可答）
+        if (state.initialized) {
+            TextButton(onClick = onBeginRecovery, modifier = Modifier.fillMaxWidth()) {
+                Text("忘记主密码？用密保问题找回")
+            }
+        }
+    }
+}
+
+/**
+ * FR-12 密保找回表单：答对 3 道密保问题后重设主密码（BR-6：原主密码不可取回）。
+ * 展示的只有问题文本——答案从不落盘（D4）。
+ */
+@Composable
+private fun RecoveryForm(
+    questions: List<String>,
+    errorMessage: String?,
+    onSubmit: (List<CharArray>, String, String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var newPassword by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    val answers = remember { List(3) { mutableStateOf("") } }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("找回主密码", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        Text("回答全部 3 道密保问题后可重设主密码。原主密码无法找回。")
+
+        Spacer(Modifier.height(16.dp))
+        questions.forEachIndexed { index, question ->
+            OutlinedTextField(
+                value = answers[index].value,
+                onValueChange = { answers[index].value = it },
+                label = { Text(question) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        OutlinedTextField(
+            value = newPassword,
+            onValueChange = { newPassword = it },
+            label = { Text("新主密码（≥8 位，两类字符）") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = confirm,
+            onValueChange = { confirm = it },
+            label = { Text("确认新主密码") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        errorMessage?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(text = it, color = MaterialTheme.colorScheme.error)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = { onSubmit(answers.map { it.value.toCharArray() }, newPassword, confirm) },
+            enabled = answers.all { it.value.isNotBlank() } &&
+                newPassword.isNotEmpty() && confirm.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("重设主密码")
+        }
+        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+            Text("返回主密码解锁")
         }
     }
 }

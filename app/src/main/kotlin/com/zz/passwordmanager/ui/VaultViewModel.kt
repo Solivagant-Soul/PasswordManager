@@ -4,9 +4,12 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zz.passwordmanager.data.header.HeaderIntegrityException
+import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.DestroyVault
 import com.zz.passwordmanager.data.vault.InitializeRequest
 import com.zz.passwordmanager.data.vault.InitializeVault
+import com.zz.passwordmanager.data.vault.ReadSecurityQuestions
+import com.zz.passwordmanager.data.vault.ResetVault
 import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultState
@@ -41,8 +44,14 @@ data class VaultUiState(
     val query: String = "",
     val revealed: Map<String, String> = emptyMap(),
     val errorMessage: String? = null,
+    /** 成功提示（如「主密码已重置，请用新密码解锁」）。 */
+    val successMessage: String? = null,
     /** Header 完整性校验失败（G-B）：数据不可用，UI 据此提供「清除重建」入口。 */
     val vaultCorrupted: Boolean = false,
+    /** FR-12 密保找回表单模式：解锁屏切换为「答密保 + 重设主密码」。 */
+    val recovering: Boolean = false,
+    /** 密保问题文本（仅问题，答案从不落盘 D4）。 */
+    val recoveryQuestions: List<String> = emptyList(),
 )
 
 /**
@@ -54,6 +63,9 @@ class VaultViewModel @Inject constructor(
     private val unlockVault: UnlockVault,
     private val initializeVault: InitializeVault,
     private val destroyVault: DestroyVault,
+    private val resetVault: ResetVault,
+    private val changeMasterPassword: ChangeMasterPassword,
+    private val readSecurityQuestions: ReadSecurityQuestions,
     private val entryRepository: EntryRepository,
     private val clipboard: AndroidClipboardBridge,
     private val sessionManager: VaultSessionManager,
@@ -101,6 +113,80 @@ class VaultViewModel @Inject constructor(
     /** 主动锁定（S51「主动锁定立即生效」）：UI 清理交给 collector 统一做。 */
     fun lock() = sessionManager.lock()
 
+    // ---- FR-12 密保找回（V1-2） ----
+
+    /** 进入找回模式：展示密保问题文本（不含答案）。 */
+    fun beginRecovery() {
+        viewModelScope.launch {
+            try {
+                val questions = readSecurityQuestions()
+                _state.update {
+                    it.copy(
+                        recovering = true,
+                        recoveryQuestions = questions,
+                        errorMessage = null,
+                    )
+                }
+            } catch (e: HeaderIntegrityException) {
+                _state.update { it.copy(vaultCorrupted = true, errorMessage = null) }
+            }
+        }
+    }
+
+    fun cancelRecovery() {
+        _state.update { it.copy(recovering = false, recoveryQuestions = emptyList(), errorMessage = null) }
+    }
+
+    /**
+     * 答对 3 道密保问题后重置主密码（BR-6：原主密码不可取回，只能重置）。
+     * 成功后回到普通解锁态，提示用新密码解锁。
+     */
+    fun recoverVault(
+        answers: List<CharArray>,
+        newPassword: String,
+        confirmNewPassword: String,
+    ) {
+        viewModelScope.launch {
+            resetVault(answers, newPassword.toCharArray(), confirmNewPassword.toCharArray()).fold(
+                onSuccess = {
+                    _state.update {
+                        it.copy(
+                            recovering = false,
+                            recoveryQuestions = emptyList(),
+                            errorMessage = null,
+                            successMessage = "主密码已重置，请用新密码解锁",
+                        )
+                    }
+                },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
+            )
+        }
+    }
+
+    // ---- P-07 修改主密码（V1-3） ----
+
+    // 方法名刻意不同于注入的 use case 属性名，否则同名词会被解析为自身（无限递归）
+    fun submitMasterPasswordChange(
+        currentPassword: String,
+        newPassword: String,
+        confirmNewPassword: String,
+        onChanged: () -> Unit,
+    ) {
+        viewModelScope.launch {
+            changeMasterPassword(
+                currentPassword.toCharArray(),
+                newPassword.toCharArray(),
+                confirmNewPassword.toCharArray(),
+            ).fold(
+                onSuccess = {
+                    _state.update { it.copy(successMessage = "主密码已修改") }
+                    onChanged()
+                },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
+            )
+        }
+    }
+
     // ---- 初始化 / 解锁（FR-1 / FR-2） ----
 
     fun initialize(form: UnlockFormData) {
@@ -116,7 +202,7 @@ class VaultViewModel @Inject constructor(
                     ),
                 ).fold(
                     onSuccess = { unlock(form.masterPassword) },
-                    onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                    onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
                 )
             } catch (e: HeaderIntegrityException) {
                 // G-B：既有库 Header 已损坏，不进初始化流程（宁严勿松），只提供清除入口
@@ -134,7 +220,7 @@ class VaultViewModel @Inject constructor(
                         _state.update { it.copy(locked = false) }
                         search(_state.value.query)
                     },
-                    onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                    onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
                 )
             } catch (e: HeaderIntegrityException) {
                 _state.update { it.copy(vaultCorrupted = true, errorMessage = null) }
@@ -153,7 +239,7 @@ class VaultViewModel @Inject constructor(
                     sessionManager.lock()
                     _state.value = VaultUiState(initialized = false, locked = true)
                 },
-                onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
     }
@@ -170,7 +256,7 @@ class VaultViewModel @Inject constructor(
             try {
                 details[id] = entryRepository.get(id)
             } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = e.message) }
+                _state.update { it.copy(errorMessage = userMessage(e)) }
             }
         }
     }
@@ -182,7 +268,7 @@ class VaultViewModel @Inject constructor(
                 val entries = entryRepository.search(query, null, null).first()
                 _state.update { it.copy(entries = entries) }
             } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = e.message) }
+                _state.update { it.copy(errorMessage = userMessage(e)) }
             }
         }
     }
@@ -193,7 +279,7 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch {
             entryRepository.revealPassword(id).fold(
                 onSuccess = { pw -> _state.update { it.copy(revealed = it.revealed + (id to pw.concatToString())) } },
-                onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
     }
@@ -206,7 +292,7 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch {
             entryRepository.revealPassword(id).fold(
                 onSuccess = { pw -> clipboard.copySensitive(pw.concatToString()) },
-                onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
     }
@@ -225,7 +311,7 @@ class VaultViewModel @Inject constructor(
                     refresh()
                     onSaved()
                 },
-                onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
     }
@@ -234,7 +320,7 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch {
             entryRepository.delete(id).fold(
                 onSuccess = { refresh() },
-                onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
     }

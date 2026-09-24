@@ -1,8 +1,13 @@
 package com.zz.passwordmanager
 
 import com.zz.passwordmanager.data.header.HeaderIntegrityException
+import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.DestroyVault
+import com.zz.passwordmanager.data.vault.ReadSecurityQuestions
+import com.zz.passwordmanager.data.vault.ResetVault
 import com.zz.passwordmanager.data.vault.InitializeVault
+import com.zz.passwordmanager.data.vault.AuthError
+import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.Session
 import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
@@ -43,6 +48,9 @@ class VaultViewModelTest {
     private val unlockVault: UnlockVault = mockk()
     private val initializeVault: InitializeVault = mockk()
     private val destroyVault: DestroyVault = mockk(relaxed = true)
+    private val resetVault: ResetVault = mockk(relaxed = true)
+    private val changeMasterPassword: ChangeMasterPassword = mockk(relaxed = true)
+    private val readSecurityQuestions: ReadSecurityQuestions = mockk(relaxed = true)
     private val repository: EntryRepository = mockk()
     private val clipboard: AndroidClipboardBridge = mockk(relaxed = true)
     // V1-1：VM 现在在 init 里 collect sessionManager.state。relaxed mock 的 state
@@ -57,7 +65,8 @@ class VaultViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         viewModel = VaultViewModel(
-            unlockVault, initializeVault, destroyVault,
+            unlockVault, initializeVault, destroyVault, resetVault,
+            changeMasterPassword, readSecurityQuestions,
             repository, clipboard, sessionManager, status,
         )
     }
@@ -192,6 +201,64 @@ class VaultViewModelTest {
         assertTrue(state.locked)
         assertFalse(state.vaultCorrupted)
         assertTrue(sessionManager.state.value is VaultState.Locked)
+    }
+
+    // ---- V1-2 FR-12 密保找回 / V1-3 P-07 修改主密码 ----
+
+    @Test
+    fun `begin recovery loads question texts and switches to recovery form`() = runTest(dispatcher) {
+        every { readSecurityQuestions() } returns listOf("母亲姓名", "第一所学校", "第一只宠物")
+
+        viewModel.beginRecovery()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.state.first()
+        assertTrue(state.recovering)
+        assertEquals(listOf("母亲姓名", "第一所学校", "第一只宠物"), state.recoveryQuestions)
+    }
+
+    @Test
+    fun `recover vault success returns to unlock form with a success hint`() = runTest(dispatcher) {
+        every { readSecurityQuestions() } returns listOf("q1", "q2", "q3")
+        coEvery { resetVault(any(), any(), any()) } returns Result.success(Unit)
+        viewModel.beginRecovery()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.recoverVault(listOf("a1".toCharArray()), "N3wPass0rd!", "N3wPass0rd!")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.state.first()
+        assertFalse("应退出找回表单", state.recovering)
+        assertTrue("应留在锁定态等待用新密码解锁", state.locked)
+        assertEquals("主密码已重置，请用新密码解锁", state.successMessage)
+    }
+
+    @Test
+    fun `recover vault failure surfaces a human readable message`() = runTest(dispatcher) {
+        every { readSecurityQuestions() } returns listOf("q1", "q2", "q3")
+        coEvery { resetVault(any(), any(), any()) } returns Result.failure(
+            AuthException(AuthError.WrongAnswers(attemptsRemaining = 3)),
+        )
+        viewModel.beginRecovery()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.recoverVault(listOf("bad".toCharArray()), "N3wPass0rd!", "N3wPass0rd!")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("密保答案错误，还可尝试 3 次", viewModel.state.first().errorMessage)
+    }
+
+    @Test
+    fun `change master password success reports and leaves the settings screen`() = runTest(dispatcher) {
+        unlockSuccessfully()
+        coEvery { changeMasterPassword(any(), any(), any()) } returns Result.success(Unit)
+        var navigatedBack = false
+
+        viewModel.submitMasterPasswordChange("old", "N3wPass0rd!", "N3wPass0rd!") { navigatedBack = true }
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(navigatedBack)
+        assertEquals("主密码已修改", viewModel.state.first().successMessage)
     }
 
     // ---- V1-1 FR-8 自动锁定 ----

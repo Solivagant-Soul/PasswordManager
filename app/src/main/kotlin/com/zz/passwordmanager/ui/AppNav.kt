@@ -15,6 +15,7 @@ sealed interface Screen {
     data object List : Screen
     data class Detail(val entryId: String) : Screen
     data class Edit(val entryId: String?) : Screen
+    data object Settings : Screen
 }
 
 @Composable
@@ -37,6 +38,9 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
             onInitialize = viewModel::initialize,
             onUnlock = viewModel::unlock,
             onDestroyVault = viewModel::destroyCorruptedVault,
+            onBeginRecovery = viewModel::beginRecovery,
+            onRecover = viewModel::recoverVault,
+            onCancelRecovery = viewModel::cancelRecovery,
         )
         return
     }
@@ -50,6 +54,21 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onQueryChange = viewModel::search,
                 onOpen = { backStack.add(Screen.Detail(it)) },
                 onCreate = { backStack.add(Screen.Edit(null)) },
+                onSettings = { backStack.add(Screen.Settings) },
+                onLock = viewModel::lock,
+            )
+        }
+
+        Screen.Settings -> {
+            SettingsScreen(
+                errorMessage = state.errorMessage,
+                successMessage = state.successMessage,
+                onChangeMasterPassword = { current, new, confirm ->
+                    viewModel.submitMasterPasswordChange(current, new, confirm) {
+                        backStack.removeAt(backStack.lastIndex)
+                    }
+                },
+                onBack = { backStack.removeAt(backStack.lastIndex) },
             )
         }
 

@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -27,6 +29,8 @@ fun EntryListScreen(
     onQueryChange: (String) -> Unit,
     onOpen: (String) -> Unit,
     onCreate: () -> Unit,
+    onSettings: () -> Unit,
+    onLock: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         OutlinedTextField(
@@ -62,6 +66,10 @@ fun EntryListScreen(
             Button(onClick = onCreate, modifier = Modifier.weight(1f)) {
                 Text("新增条目")
             }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onSettings) { Text("设置") }
+            // S51 主动锁定立即生效
+            TextButton(onClick = onLock) { Text("锁定") }
         }
     }
 }

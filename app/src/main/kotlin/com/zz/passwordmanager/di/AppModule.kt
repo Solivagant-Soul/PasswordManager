@@ -12,6 +12,7 @@ import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.ChangeSecurityQuestions
 import com.zz.passwordmanager.data.vault.DestroyVault
 import com.zz.passwordmanager.data.vault.InitializeVault
+import com.zz.passwordmanager.data.vault.ReadSecurityQuestions
 import com.zz.passwordmanager.data.vault.ResetVault
 import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
@@ -94,6 +95,11 @@ object AppModule {
         store: VaultHeaderStore,
         throttle: AuthThrottle,
     ): ChangeMasterPassword = ChangeMasterPassword(keyManager, store, throttle)
+
+    /** FR-12 密保找回入口：只读问题文本供 UI 展示。 */
+    @Provides
+    fun provideReadSecurityQuestions(store: VaultHeaderStore): ReadSecurityQuestions =
+        ReadSecurityQuestions(store)
 
     @Provides
     fun provideChangeSecurityQuestions(
