@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.domain.entries.EntryInput
+import com.zz.passwordmanager.domain.password.PasswordGenerator
 
 /**
  * 新增/编辑表单（FR-3/T16）：必填校验（标题/密码）在客户端先行提示，
@@ -38,6 +39,7 @@ fun EntryEditScreen(
     var notes by remember { mutableStateOf(existing?.notes ?: "") }
     var tags by remember { mutableStateOf(existing?.tags?.joinToString() ?: "") }
     var localError by remember { mutableStateOf<String?>(null) }
+    var showGenerator by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         TextButton(onClick = onBack) { Text("← 返回") }
@@ -60,6 +62,8 @@ fun EntryEditScreen(
             label = { Text(if (existing == null) "密码（必填）" else "新密码（必填）") },
             modifier = Modifier.fillMaxWidth(),
         )
+        // FR-4：生成器一键回填到密码框
+        TextButton(onClick = { showGenerator = true }) { Text("⚡ 生成强密码") }
         OutlinedTextField(
             value = url, onValueChange = { url = it },
             label = { Text("网址（http:// 或 https://）") }, modifier = Modifier.fillMaxWidth(),
@@ -105,5 +109,16 @@ fun EntryEditScreen(
         ) {
             Text("保存")
         }
+    }
+
+    if (showGenerator) {
+        GeneratorDialog(
+            onDismiss = { showGenerator = false },
+            onGenerate = { rules ->
+                // 领域层是纯函数、不抛异常；失败已由弹窗在校验阶段拦下，此处兜底不生成
+                PasswordGenerator.generate(rules).onSuccess { password = it.concatToString() }
+                showGenerator = false
+            },
+        )
     }
 }
