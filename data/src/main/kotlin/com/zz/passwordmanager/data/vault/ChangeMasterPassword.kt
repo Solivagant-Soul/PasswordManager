@@ -5,6 +5,9 @@ import com.zz.passwordmanager.data.crypto.KeyUnwrapException
 import com.zz.passwordmanager.data.header.VaultHeaderStore
 import com.zz.passwordmanager.domain.password.PasswordPolicy
 import java.security.SecureRandom
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 修改主密码（T11，P-07）：验旧 → 解出 DEK → 新盐新 KEK 重裹。
@@ -18,9 +21,18 @@ class ChangeMasterPassword(
     private val headerStore: VaultHeaderStore,
     private val throttle: AuthThrottle,
     private val secureRandom: SecureRandom = SecureRandom(),
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
-    operator fun invoke(
+    suspend operator fun invoke(
+        currentPassword: CharArray,
+        newPassword: CharArray,
+        confirmNewPassword: CharArray,
+    ): Result<Unit> = throttle.serialized {
+        withContext(computeDispatcher) { change(currentPassword, newPassword, confirmNewPassword) }
+    }
+
+    private fun change(
         currentPassword: CharArray,
         newPassword: CharArray,
         confirmNewPassword: CharArray,

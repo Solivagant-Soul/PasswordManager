@@ -5,6 +5,9 @@ import com.zz.passwordmanager.data.crypto.KeyUnwrapException
 import com.zz.passwordmanager.data.header.VaultHeaderStore
 import com.zz.passwordmanager.domain.password.PasswordPolicy
 import java.security.SecureRandom
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 密保找回（FR-12/T10，方案 §6.3）：3 道答案解出 DEK → 新主密码重置 → 重裹 DEK。
@@ -19,9 +22,18 @@ class ResetVault(
     private val headerStore: VaultHeaderStore,
     private val throttle: AuthThrottle,
     private val secureRandom: SecureRandom = SecureRandom(),
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
-    operator fun invoke(
+    suspend operator fun invoke(
+        answers: List<CharArray>,
+        newPassword: CharArray,
+        confirmNewPassword: CharArray,
+    ): Result<Unit> = throttle.serialized {
+        withContext(computeDispatcher) { reset(answers, newPassword, confirmNewPassword) }
+    }
+
+    private fun reset(
         answers: List<CharArray>,
         newPassword: CharArray,
         confirmNewPassword: CharArray,

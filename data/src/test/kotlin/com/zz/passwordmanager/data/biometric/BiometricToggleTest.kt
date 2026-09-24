@@ -18,6 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import kotlinx.coroutines.test.runTest
 
 /** T09/P-03：开关须验主密码；开启须硬件可用（MockK 首次实战）。 */
 class BiometricToggleTest {
@@ -34,7 +35,7 @@ class BiometricToggleTest {
 
     private fun toggle() = BiometricToggle(keyManager, headerStore, throttle, gate)
 
-    private fun initialize() {
+    private suspend fun initialize() {
         assertTrue(
             InitializeVault(keyManager, headerStore, SecureRandom(), SMALL)(
                 InitializeRequest(
@@ -49,7 +50,7 @@ class BiometricToggleTest {
     }
 
     @Test
-    fun `enable succeeds when hardware available`() {
+    fun `enable succeeds when hardware available`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
 
@@ -58,7 +59,7 @@ class BiometricToggleTest {
     }
 
     @Test
-    fun `enable fails when not enrolled`() {
+    fun `enable fails when not enrolled`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.NOT_ENROLLED
 
@@ -73,7 +74,7 @@ class BiometricToggleTest {
     }
 
     @Test
-    fun `enable fails when no hardware`() {
+    fun `enable fails when no hardware`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.NO_HARDWARE
 
@@ -83,7 +84,7 @@ class BiometricToggleTest {
     }
 
     @Test
-    fun `disable does not require hardware`() {
+    fun `disable does not require hardware`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.NO_HARDWARE
 
@@ -92,7 +93,7 @@ class BiometricToggleTest {
     }
 
     @Test
-    fun `wrong master password is rejected`() {
+    fun `wrong master password is rejected`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
 

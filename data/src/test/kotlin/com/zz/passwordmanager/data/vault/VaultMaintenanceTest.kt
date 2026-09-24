@@ -11,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import kotlinx.coroutines.test.runTest
 
 /** T10/T11 验收：找回重置、修改主密码（feature 11 映射；限流与主密码共享）。 */
 class VaultMaintenanceTest {
@@ -27,7 +28,7 @@ class VaultMaintenanceTest {
     private val oldPassword = "Passw0rd!主密码"
     private val answers = listOf("a1", "a2", "a3").map { it.toCharArray() } // 与 initialize 的密保一致
 
-    private fun initialize() {
+    private suspend fun initialize() {
         assertTrue(
             InitializeVault(keyManager, headerStore, SecureRandom(), SMALL)(
                 InitializeRequest(
@@ -44,7 +45,7 @@ class VaultMaintenanceTest {
     // ---- ResetVault（找回重置，FR-12） ----
 
     @Test
-    fun `correct answers reset master password`() {
+    fun `correct answers reset master password`() = runTest {
         initialize()
 
         val result = ResetVault(keyManager, headerStore, throttle)(
@@ -58,7 +59,7 @@ class VaultMaintenanceTest {
     }
 
     @Test
-    fun `wrong answers share throttle with master password`() {
+    fun `wrong answers share throttle with master password`() = runTest {
         initialize()
         val reset = ResetVault(keyManager, headerStore, throttle)
 
@@ -76,7 +77,7 @@ class VaultMaintenanceTest {
     }
 
     @Test
-    fun `correct answers with weak new password returns invalid without counting`() {
+    fun `correct answers with weak new password returns invalid without counting`() = runTest {
         initialize()
         val attemptsBefore = headerStore.read()!!.failedAttempts
 
@@ -90,7 +91,7 @@ class VaultMaintenanceTest {
     }
 
     @Test
-    fun `reset rotates recovery salt so old answers no longer derive recovery key`() {
+    fun `reset rotates recovery salt so old answers no longer derive recovery key`() = runTest {
         initialize()
         assertTrue(ResetVault(keyManager, headerStore, throttle)(answers, "NewPass0rd!新".toCharArray(), "NewPass0rd!新".toCharArray()).isSuccess)
 
@@ -101,7 +102,7 @@ class VaultMaintenanceTest {
     // ---- ChangeMasterPassword（T11/P-07） ----
 
     @Test
-    fun `change master password with correct current succeeds`() {
+    fun `change master password with correct current succeeds`() = runTest {
         initialize()
 
         val result = ChangeMasterPassword(keyManager, headerStore, throttle)(
@@ -114,7 +115,7 @@ class VaultMaintenanceTest {
     }
 
     @Test
-    fun `change master password with wrong current is rejected and counted`() {
+    fun `change master password with wrong current is rejected and counted`() = runTest {
         initialize()
 
         val result = ChangeMasterPassword(keyManager, headerStore, throttle)(
@@ -127,7 +128,7 @@ class VaultMaintenanceTest {
     }
 
     @Test
-    fun `change master password does not rotate dek (biometric copy stays valid)`() {
+    fun `change master password does not rotate dek (biometric copy stays valid)`() = runTest {
         initialize()
         ChangeMasterPassword(keyManager, headerStore, throttle)(
             oldPassword.toCharArray(), "NewPass0rd!新".toCharArray(), "NewPass0rd!新".toCharArray(),
@@ -137,6 +138,44 @@ class VaultMaintenanceTest {
         val header = headerStore.read()!!
         assertEquals(0, header.failedAttempts)
         assertTrue(header.biometricEnabled.not())
+    }
+
+    // ---- 评审 G-F：改密保与初始化共用同一份校验规则 ----
+
+    @Test
+    fun `change security questions rejects overlong question like initialization does`() = runTest {
+        initialize()
+        val change = ChangeSecurityQuestions(keyManager, headerStore, throttle)
+        val questions = listOf("x".repeat(101), "q2", "q3").mapIndexed { index, text ->
+            InitializeRequest.SecurityQuestionInput(text, "a${index + 1}".toCharArray())
+        }
+
+        val result = change(questions, oldPassword.toCharArray())
+
+        val issues = ((result.exceptionOrNull() as AuthException).error as AuthError.Invalid).issues
+        assertEquals(
+            listOf(Issue(SecurityQuestionPolicy.FIELD, "question 1: invalid length")),
+            issues,
+        )
+        // 校验失败不得改写 Header（无脏数据，S5）
+        assertEquals("q1", headerStore.read()!!.securityQuestions.first().questionText)
+    }
+
+    @Test
+    fun `change security questions rejects wrong question count`() = runTest {
+        initialize()
+        val change = ChangeSecurityQuestions(keyManager, headerStore, throttle)
+
+        val result = change(
+            listOf(InitializeRequest.SecurityQuestionInput("q1", "a1".toCharArray())),
+            oldPassword.toCharArray(),
+        )
+
+        val issues = ((result.exceptionOrNull() as AuthException).error as AuthError.Invalid).issues
+        assertEquals(
+            listOf(Issue(SecurityQuestionPolicy.FIELD, "expected 3 questions")),
+            issues,
+        )
     }
 
     private companion object {

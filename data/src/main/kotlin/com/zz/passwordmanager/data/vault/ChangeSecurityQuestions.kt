@@ -5,6 +5,9 @@ import com.zz.passwordmanager.data.crypto.KeyUnwrapException
 import com.zz.passwordmanager.data.header.SecurityQuestionRecord
 import com.zz.passwordmanager.data.header.VaultHeaderStore
 import java.security.SecureRandom
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 修改密保（T10/P-10）：验当前主密码 → 新问题+新答案重派生恢复密钥 → 重裹 DEK 副本。
@@ -17,9 +20,17 @@ class ChangeSecurityQuestions(
     private val headerStore: VaultHeaderStore,
     private val throttle: AuthThrottle,
     private val secureRandom: SecureRandom = SecureRandom(),
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
-    operator fun invoke(
+    suspend operator fun invoke(
+        questions: List<InitializeRequest.SecurityQuestionInput>,
+        currentPassword: CharArray,
+    ): Result<Unit> = throttle.serialized {
+        withContext(computeDispatcher) { change(questions, currentPassword) }
+    }
+
+    private fun change(
         questions: List<InitializeRequest.SecurityQuestionInput>,
         currentPassword: CharArray,
     ): Result<Unit> {
@@ -44,21 +55,8 @@ class ChangeSecurityQuestions(
             )
         }
 
-        val issues = mutableListOf<Issue>()
-        if (questions.size != 3) {
-            issues += Issue("securityQuestions", "expected 3 questions")
-        } else {
-            questions.forEachIndexed { index, q ->
-                val question = q.question.trim()
-                val answer = q.answer.concatToString().trim()
-                if (question.isEmpty() || question.length > 100) {
-                    issues += Issue("securityQuestions", "question ${index + 1}: invalid length")
-                }
-                if (answer.isEmpty() || answer.length > 60) {
-                    issues += Issue("securityQuestions", "answer ${index + 1}: invalid length")
-                }
-            }
-        }
+        // 与 InitializeVault 共用同一份规则（评审 G-F：原先两处硬编码 3/100/60，易漂移）
+        val issues = SecurityQuestionPolicy.issues(questions)
         if (issues.isNotEmpty()) {
             return Result.failure(AuthException(AuthError.Invalid(issues)))
         }

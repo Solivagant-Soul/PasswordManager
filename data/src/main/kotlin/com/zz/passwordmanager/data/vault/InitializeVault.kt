@@ -8,6 +8,9 @@ import com.zz.passwordmanager.data.header.SecurityQuestionRecord
 import com.zz.passwordmanager.data.header.VaultHeader
 import com.zz.passwordmanager.data.header.VaultHeaderStore
 import java.security.SecureRandom
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** 初始化请求（方案 §5）：答案用 CharArray，只在用例内消费、不落盘（D4）。 */
 data class InitializeRequest(
@@ -39,9 +42,13 @@ class InitializeVault(
     private val headerStore: VaultHeaderStore,
     private val secureRandom: SecureRandom = SecureRandom(),
     private val kdfParams: KdfParams = Argon2KeyManager.DEFAULT_KDF_PARAMS,
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
-    operator fun invoke(request: InitializeRequest): Result<Unit> {
+    suspend operator fun invoke(request: InitializeRequest): Result<Unit> =
+        withContext(computeDispatcher) { initialize(request) }
+
+    private fun initialize(request: InitializeRequest): Result<Unit> {
         if (headerStore.read() != null) {
             return Result.failure(InitializationException(InitializationError.AlreadyInitialized))
         }
@@ -88,30 +95,14 @@ class InitializeVault(
         if (!request.masterPassword.contentEquals(request.confirmMasterPassword)) {
             issues += Issue(FIELD_CONFIRM_PASSWORD, "mismatch")
         }
-        if (request.securityQuestions.size != REQUIRED_QUESTIONS) {
-            issues += Issue(FIELD_QUESTIONS, "expected $REQUIRED_QUESTIONS questions")
-        } else {
-            request.securityQuestions.forEachIndexed { index, q ->
-                val question = q.question.trim()
-                if (question.isEmpty() || question.length > QUESTION_MAX) {
-                    issues += Issue(FIELD_QUESTIONS, "question ${index + 1}: invalid length")
-                }
-                val answer = q.answer.concatToString().trim()
-                if (answer.isEmpty() || answer.length > ANSWER_MAX) {
-                    issues += Issue(FIELD_QUESTIONS, "answer ${index + 1}: invalid length")
-                }
-            }
-        }
+        // 密保规则与 ChangeSecurityQuestions 共用（评审 G-F：防两处规则漂移）
+        issues += SecurityQuestionPolicy.issues(request.securityQuestions)
         return issues
     }
 
     private companion object {
         const val FIELD_MASTER_PASSWORD = "masterPassword"
         const val FIELD_CONFIRM_PASSWORD = "confirmMasterPassword"
-        const val FIELD_QUESTIONS = "securityQuestions"
-        const val REQUIRED_QUESTIONS = 3
-        const val QUESTION_MAX = 100
-        const val ANSWER_MAX = 60
         const val DEK_BYTES = 32
         const val SALT_BYTES = 16
     }

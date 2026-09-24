@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 的备份/迁移规则（NFR-S：密码库不离开设备）。
+
+  allowBackup="false" 在 12+ 仅约束云备份，设备间直传（D2D）不再被它覆盖，
+  因此在此显式关闭两者——Header、SQLCipher 库、header-mac.key 均不得外流。
+  本文件与 allowBackup="false" 并存：前者管 12+，后者管 11 及以下。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

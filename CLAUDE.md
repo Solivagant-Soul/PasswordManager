@@ -4,20 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目当前状态
 
-需求/设计阶段已完成，代码阶段已启动：Android 工程位于仓库根目录，`DesignDocument/` 为设计文档目录。
+需求/设计阶段已完成，代码阶段进行中：Android 工程位于仓库根目录，`DesignDocument/` 为设计文档目录。
 
-- 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，当前进度：T01 已完成）。
+- 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑见 §7）。**当前进度：M0–M2 已完成（T01–T18）**——认证与密码库核心闭环（M1）、条目管理 CRUD/搜索/剪贴板（M2）。下一步 M3（T19–T21 密码生成器 / TOTP）。
 - 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
 - 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
 
 ## 构建与验证命令
 
 ```bash
-./gradlew :app:assembleDebug       # 构建 Debug APK
-./gradlew :app:testDebugUnitTest   # JVM 单元测试
-./gradlew :app:lintDebug           # Android Lint
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug   # 任务验收全套（T01 同款）
+# 阶段验收：构建 + 全部 JVM 单测 + Lint
+./gradlew :app:assembleDebug :app:testDebugUnitTest :data:testDebugUnitTest \
+          :domain:test :core:test :platform:testDebugUnitTest :app:lintDebug
+
+# 仪器测试（需模拟器/真机；SQLCipher 为 native 库，JVM 单测无法覆盖）
+./gradlew :data:connectedDebugAndroidTest :platform:connectedDebugAndroidTest
 ```
+
+## 工程约定
+
+- **源根只用 `src/{main,test,androidTest}/kotlin`**：历史上 `java/` 与 `kotlin/` 双源根并存，导致同包同名类被编译两次、KSP 重复生成 Hilt 注入器（`:app:kspDebugKotlin` FileAlreadyExistsException）。
+- **androidTest 禁用反引号方法名**：`minSdk 26` 对应 DEX 038，不接受 SimpleName 中的空格，方法名必须 camelCase。JVM 单测（`src/test`）不受此限。
+- **数据层自持调度器**：Argon2 派生走 `Dispatchers.Default`、SQLCipher 与 Room 走 `Dispatchers.IO`（均在用例/仓库内部 `withContext`），调用方（ViewModel）不应选择调度器。
+- **Room 迁移**：`data/schemas/` 已导出并入库，且经 `sourceSets.androidTest.assets.srcDir` 挂载供 `MigrationTestHelper` 读取；改 schema 必须同时提交新 JSON 与迁移测试。
 
 ## 权威文档（唯一事实来源）
 
@@ -27,6 +36,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `DesignDocument/架构视图.md` —— Mermaid 架构视图（系统上下文图、组件图、解锁与找回流程图）。
 - `DesignDocument/技术方案.md`（当前 v0.3）—— 技术选型、分层架构、数据模型、内部接口、任务拆解、风险与架构决策记录。
 - `DesignDocument/技术方案评审意见.md` —— 技术方案评审记录（含 B1/S1/S2/S3 等问题的处置）。
+- `DesignDocument/M1安全评审报告.md` —— M1 安全评审门禁（S-1 已修复；G-A~G-G 遗留项）。
+- `DesignDocument/遗留项与决策记录.md` —— 各里程碑遗留问题的处置状态与归属里程碑（含推迟理由）。
 
 文档结构要点（便于快速定位）：
 

@@ -13,19 +13,28 @@ import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.entries.EntryRepositoryException
 import com.zz.passwordmanager.domain.entries.EntrySummary
 import java.util.UUID
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 
 /**
  * EntryRepository 实现（T14）：门禁 → 校验（需求 §6.3）→ 5000 上限（Q-07）→
  * 字段级加解密（T18：password 经 DEK）→ DAO 委派。
  * DB 经 [VaultDatabaseProvider] 惰性获取（DEK 由解锁会话给出）。
+ *
+ * 全部方法在 [ioDispatcher] 上执行（M2 遗留 D-1）：DEK 加解密与 SQLCipher 开库都是
+ * 阻塞式重活，留在调用方（ViewModel 的 Main）会造成掉帧乃至 ANR。调度器由数据层自持，
+ * 调用方无需感知（M4 autofill 等新调用方自动受益）。
  */
 class EntryRepositoryImpl(
     private val dbProvider: VaultDatabaseProvider,
     private val sessionManager: VaultSessionManager,
     private val keyManager: KeyManager,
     private val maxEntries: Int = 5_000, // Q-07
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : EntryRepository {
 
     override fun search(query: String, categoryId: String?, tag: String?): Flow<List<EntrySummary>> =
@@ -39,14 +48,14 @@ class EntryRepositoryImpl(
                 db.entryDao().search(normalized, categoryId)
             }
             emit(rows.map { it.toSummary() })
-        }
+        }.flowOn(ioDispatcher)
 
-    override suspend fun get(id: String): EntryDetail? {
+    override suspend fun get(id: String): EntryDetail? = withContext(ioDispatcher) {
         val db = dbProvider.get(sessionManager.requireUnlocked().dek)
-        return db.entryDao().getById(id)?.let { it.toDetail(db.entryTagDao().tagsFor(id)) }
+        db.entryDao().getById(id)?.let { it.toDetail(db.entryTagDao().tagsFor(id)) }
     }
 
-    override suspend fun create(input: EntryInput): Result<String> {
+    override suspend fun create(input: EntryInput): Result<String> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
         val db = dbProvider.get(dek)
         val entryDao = db.entryDao()
@@ -55,10 +64,14 @@ class EntryRepositoryImpl(
 
         val issues = validate(input)
         if (issues.isNotEmpty()) {
-            return Result.failure(EntryRepositoryException(EntryRepositoryException.Reason.INVALID, issues))
+            return@withContext Result.failure(
+                EntryRepositoryException(EntryRepositoryException.Reason.INVALID, issues),
+            )
         }
         if (entryDao.count() >= maxEntries) {
-            return Result.failure(EntryRepositoryException(EntryRepositoryException.Reason.LIMIT_REACHED))
+            return@withContext Result.failure(
+                EntryRepositoryException(EntryRepositoryException.Reason.LIMIT_REACHED),
+            )
         }
 
         val now = System.currentTimeMillis()
@@ -81,10 +94,10 @@ class EntryRepositoryImpl(
             ),
         )
         saveTags(tagDao, entryTagDao, id, input.tags)
-        return Result.success(id)
+        Result.success(id)
     }
 
-    override suspend fun update(id: String, input: EntryInput): Result<Unit> {
+    override suspend fun update(id: String, input: EntryInput): Result<Unit> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
         val db = dbProvider.get(dek)
         val entryDao = db.entryDao()
@@ -92,10 +105,14 @@ class EntryRepositoryImpl(
         val entryTagDao = db.entryTagDao()
 
         val existing = entryDao.getById(id)
-            ?: return Result.failure(EntryRepositoryException(EntryRepositoryException.Reason.NOT_FOUND))
+            ?: return@withContext Result.failure(
+                EntryRepositoryException(EntryRepositoryException.Reason.NOT_FOUND),
+            )
         val issues = validate(input)
         if (issues.isNotEmpty()) {
-            return Result.failure(EntryRepositoryException(EntryRepositoryException.Reason.INVALID, issues))
+            return@withContext Result.failure(
+                EntryRepositoryException(EntryRepositoryException.Reason.INVALID, issues),
+            )
         }
 
         entryTagDao.deleteFor(id)
@@ -114,21 +131,23 @@ class EntryRepositoryImpl(
                 updatedAt = System.currentTimeMillis(),
             ),
         )
-        return Result.success(Unit)
+        Result.success(Unit)
     }
 
-    override suspend fun delete(id: String): Result<Unit> {
+    override suspend fun delete(id: String): Result<Unit> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
         dbProvider.get(dek).entryDao().deleteById(id) // entry_tags 经外键 CASCADE 清理
-        return Result.success(Unit)
+        Result.success(Unit)
     }
 
-    override suspend fun revealPassword(id: String): Result<CharArray> {
+    override suspend fun revealPassword(id: String): Result<CharArray> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
         val entry = dbProvider.get(dek).entryDao().getById(id)
-            ?: return Result.failure(EntryRepositoryException(EntryRepositoryException.Reason.NOT_FOUND))
+            ?: return@withContext Result.failure(
+                EntryRepositoryException(EntryRepositoryException.Reason.NOT_FOUND),
+            )
         val plain = keyManager.decrypt(entry.passwordCipher, dek)
-        return Result.success(plain.decodeToString().toCharArray()) // plain 字节由 GC 处理（T05 已知局限）
+        Result.success(plain.decodeToString().toCharArray()) // plain 字节由 GC 处理（T05 已知局限）
     }
 
     private suspend fun saveTags(

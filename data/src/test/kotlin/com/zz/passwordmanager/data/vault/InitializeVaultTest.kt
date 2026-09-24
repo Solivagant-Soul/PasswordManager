@@ -12,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import kotlinx.coroutines.test.runTest
 
 /**
  * T06 验收：feature 01 相关场景在用例层通过（纯 JVM，Argon2 小参数提速）。
@@ -46,7 +47,7 @@ class InitializeVaultTest {
     // ---- 成功路径 ----
 
     @Test
-    fun `initialize succeeds and header is readable without dek`() {
+    fun `initialize succeeds and header is readable without dek`() = runTest {
         assertTrue(useCase()(request()).isSuccess)
 
         val header = VaultHeaderStore(tmp.root, macKey).read()
@@ -59,7 +60,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `master and recovery paths wrap the same dek`() {
+    fun `master and recovery paths wrap the same dek`() = runTest {
         useCase()(request())
 
         val header = VaultHeaderStore(tmp.root, macKey).read()!!
@@ -80,7 +81,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `initialization is idempotent guarded`() {
+    fun `initialization is idempotent guarded`() = runTest {
         useCase()(request())
 
         val second = useCase()(request())
@@ -92,7 +93,7 @@ class InitializeVaultTest {
     // ---- 校验失败（对照 feature 01） ----
 
     @Test
-    fun `mismatched confirmation is rejected`() {
+    fun `mismatched confirmation is rejected`() = runTest {
         val result = useCase()(request(confirm = "Passw0rd!不同"))
 
         val error = (result.exceptionOrNull() as InitializationException).error
@@ -100,7 +101,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `too short password is rejected`() {
+    fun `too short password is rejected`() = runTest {
         val result = useCase()(request(password = "Ab1x"))
 
         val issues = (result.exceptionOrNull() as InitializationException).error as InitializationError.Invalid
@@ -108,7 +109,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `single class password is rejected`() {
+    fun `single class password is rejected`() = runTest {
         val result = useCase()(request(password = "abcdefgh"))
 
         val issues = (result.exceptionOrNull() as InitializationException).error as InitializationError.Invalid
@@ -116,7 +117,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `blank only password is rejected`() {
+    fun `blank only password is rejected`() = runTest {
         val result = useCase()(request(password = "        "))
 
         val issues = (result.exceptionOrNull() as InitializationException).error as InitializationError.Invalid
@@ -124,7 +125,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `control chars in password are rejected`() {
+    fun `control chars in password are rejected`() = runTest {
         val result = useCase()(request(password = "abc1234" + 1.toChar())) // 1.toChar() = U+0001 控制字符
 
         val issues = (result.exceptionOrNull() as InitializationException).error as InitializationError.Invalid
@@ -132,7 +133,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `fewer than three security questions are rejected`() {
+    fun `fewer than three security questions are rejected`() = runTest {
         val result = useCase()(
             request(questions = listOf("问题一" to "答案一", "问题二" to "答案二")),
         )
@@ -142,7 +143,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `overlong question is rejected`() {
+    fun `overlong question is rejected`() = runTest {
         val result = useCase()(
             request(questions = listOf("长".repeat(101) to "答案一", "问题二" to "答案二", "问题三" to "答案三")),
         )
@@ -152,7 +153,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `blank answer is rejected`() {
+    fun `blank answer is rejected`() = runTest {
         val result = useCase()(
             request(questions = listOf("问题一" to "   ", "问题二" to "答案二", "问题三" to "答案三")),
         )
@@ -162,7 +163,7 @@ class InitializeVaultTest {
     }
 
     @Test
-    fun `validation failure leaves vault uninitialized (no dirty data)`() {
+    fun `validation failure leaves vault uninitialized (no dirty data)`() = runTest {
         useCase()(request(password = "abc")) // S5：非法请求不得写入任何东西
 
         assertNull(VaultHeaderStore(tmp.root, macKey).read())

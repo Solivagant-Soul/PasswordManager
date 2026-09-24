@@ -5,11 +5,18 @@ import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.header.KdfParams
 import com.zz.passwordmanager.data.header.VaultHeaderStore
 import java.security.SecureRandom
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import kotlinx.coroutines.test.runTest
 
 /** T07 验收：正确解锁/错误计数/限流锁定（feature 02 映射；纯 JVM，fake clock 精确推进）。 */
 class UnlockVaultTest {
@@ -24,7 +31,7 @@ class UnlockVaultTest {
 
     private fun throttle() = AuthThrottle({ now })
 
-    private fun initialize() {
+    private suspend fun initialize() {
         assertTrue(
             InitializeVault(keyManager, headerStore, SecureRandom(), SMALL)(
                 request("Passw0rd!主密码"),
@@ -41,7 +48,7 @@ class UnlockVaultTest {
     )
 
     @Test
-    fun `correct password unlocks with session carrying dek`() {
+    fun `correct password unlocks with session carrying dek`() = runTest {
         initialize()
 
         val result = UnlockVault(keyManager, headerStore, throttle())("Passw0rd!主密码".toCharArray())
@@ -52,7 +59,7 @@ class UnlockVaultTest {
     }
 
     @Test
-    fun `wrong password is rejected and counted`() {
+    fun `wrong password is rejected and counted`() = runTest {
         initialize()
 
         val result = UnlockVault(keyManager, headerStore, throttle())("wrong-pass".toCharArray())
@@ -63,7 +70,7 @@ class UnlockVaultTest {
     }
 
     @Test
-    fun `fifth failure locks for one minute`() {
+    fun `fifth failure locks for one minute`() = runTest {
         initialize()
         val unlock = UnlockVault(keyManager, headerStore, throttle())
 
@@ -76,7 +83,7 @@ class UnlockVaultTest {
     }
 
     @Test
-    fun `locked vault rejects even correct password with remaining time`() {
+    fun `locked vault rejects even correct password with remaining time`() = runTest {
         initialize()
         val unlock = UnlockVault(keyManager, headerStore, throttle())
         repeat(5) { unlock("wrong".toCharArray()) }
@@ -89,7 +96,7 @@ class UnlockVaultTest {
     }
 
     @Test
-    fun `lock expires after one minute`() {
+    fun `lock expires after one minute`() = runTest {
         initialize()
         val unlock = UnlockVault(keyManager, headerStore, throttle())
         repeat(5) { unlock("wrong".toCharArray()) }
@@ -101,20 +108,57 @@ class UnlockVaultTest {
     }
 
     @Test
-    fun `uninitialized vault is rejected`() {
+    fun `uninitialized vault is rejected`() = runTest {
         val result = UnlockVault(keyManager, headerStore, throttle())("anything".toCharArray())
 
         assertEquals(AuthError.VaultMissing, (result.exceptionOrNull() as AuthException).error)
     }
 
     @Test
-    fun `successful unlock resets failure counter`() {
+    fun `successful unlock resets failure counter`() = runTest {
         initialize()
         val unlock = UnlockVault(keyManager, headerStore, throttle())
         repeat(3) { unlock("wrong".toCharArray()) }
         assertTrue(unlock("Passw0rd!主密码".toCharArray()).isSuccess)
 
         assertEquals(0, headerStore.read()!!.failedAttempts)
+    }
+
+    // ---- 评审 G-A：并发尝试不得丢失败计数 ----
+
+    @Test
+    fun `concurrent failures are all counted without lost updates`() = runTest {
+        initialize()
+        val unlock = UnlockVault(keyManager, headerStore, throttle())
+
+        // 三次并发失败（真实并行，模拟解锁按钮连点）。无临界区保护时三者会各自读到
+        // failedAttempts=0 再各自写回 1，计数丢失 → BR-9 被削弱。
+        coroutineScope {
+            List(3) { async(Dispatchers.Default) { unlock("wrong".toCharArray()) } }.awaitAll()
+        }
+
+        assertEquals(3, headerStore.read()!!.failedAttempts)
+    }
+
+    @Test
+    fun `kdf runs on the injected dispatcher rather than the caller thread`() = runTest {
+        initialize()
+        val recorder = RecordingDispatcher(Dispatchers.Default)
+        val unlock = UnlockVault(keyManager, headerStore, throttle(), recorder)
+
+        unlock("Passw0rd!主密码".toCharArray()).getOrThrow()
+
+        // M2 遗留 D-1：KDF 若在调用方（ViewModel 的 Main）执行会掉帧/ANR
+        assertTrue("KDF 未被调度到注入的 dispatcher", recorder.used)
+    }
+
+    /** 记录是否真的被用于调度（而非就地执行在调用线程）。 */
+    private class RecordingDispatcher(private val delegate: CoroutineDispatcher) : CoroutineDispatcher() {
+        var used = false
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            used = true
+            delegate.dispatch(context, block)
+        }
     }
 
     private companion object {

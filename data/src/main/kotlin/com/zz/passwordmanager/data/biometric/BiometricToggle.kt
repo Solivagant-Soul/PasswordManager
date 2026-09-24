@@ -8,19 +8,27 @@ import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.AuthThrottle
 import com.zz.passwordmanager.data.vault.Issue
 import com.zz.passwordmanager.domain.biometric.BiometricGate
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 生物识别开关（T09/P-03）：验证当前主密码方可开启/关闭；
  * 开启时须硬件可用且已录入（否则 BiometricUnavailable）。
+ * 与其余认证用例同构，故同样在 [AuthThrottle.serialized] 临界区内执行（评审 G-A）。
  */
 class BiometricToggle(
     private val keyManager: KeyManager,
     private val headerStore: VaultHeaderStore,
     private val throttle: AuthThrottle,
     private val gate: BiometricGate,
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
-    operator fun invoke(enable: Boolean, masterPassword: CharArray): Result<Unit> {
+    suspend operator fun invoke(enable: Boolean, masterPassword: CharArray): Result<Unit> =
+        throttle.serialized { withContext(computeDispatcher) { toggle(enable, masterPassword) } }
+
+    private fun toggle(enable: Boolean, masterPassword: CharArray): Result<Unit> {
         val header = headerStore.read()
             ?: return Result.failure(AuthException(AuthError.VaultMissing))
 
