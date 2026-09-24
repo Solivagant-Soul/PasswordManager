@@ -53,8 +53,9 @@ class KeystoreDekVault : BiometricDekStore {
      * 认证后的 cipher 可直接使用：IV 由 Keystore 在首次使用时生成。
      */
     override fun wrap(dek: ByteArray, authenticatedCipher: Cipher): ByteArray {
+        val iv = authenticatedCipher.iv // doFinal 之前取，避免依赖 doFinal 后的状态
         val sealed = authenticatedCipher.doFinal(dek)
-        return authenticatedCipher.iv + sealed
+        return iv + sealed
     }
 
     /**
@@ -63,8 +64,12 @@ class KeystoreDekVault : BiometricDekStore {
      * `result.cryptoObject!!.cipher` 传给 [unwrap]。未认证时本方法即会抛
      * `UserNotAuthenticatedException`（auth-per-use 的预期行为）。
      */
-    override fun createDecryptCipher(): Cipher =
-        Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.DECRYPT_MODE, getOrCreateKey()) }
+    override fun createDecryptCipher(wrapped: ByteArray): Cipher =
+        Cipher.getInstance(TRANSFORMATION).apply {
+            // GCM 解密必须连 IV 一起初始化；漏掉 IV 会抛
+            // InvalidKeyException: iv required when decrypting（v0.10 实机踩坑）
+            init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, wrapped.copyOf(NONCE_BYTES)))
+        }
 
     /**
      * 用**已通过认证**的 cipher 解出 DEK。
@@ -75,11 +80,9 @@ class KeystoreDekVault : BiometricDekStore {
      * 不把底层异常类型泄给调用方，避免把「篡改」与「密钥失效」区分开来成为 oracle。
      */
     override fun unwrap(wrapped: ByteArray, authenticatedCipher: Cipher): ByteArray = try {
-        authenticatedCipher.init(
-            Cipher.DECRYPT_MODE,
-            getOrCreateKey(),
-            GCMParameterSpec(TAG_BITS, wrapped.copyOf(NONCE_BYTES)),
-        )
+        // **不得重新 init**：`CryptoObject` 认证带来的授权绑定在 createDecryptCipher 的那次
+        // 初始化上，重新 init 会把它冲掉，doFinal 随即抛 UserNotAuthenticatedException。
+        // IV 已在建 cipher 时提供，这里只做 doFinal。
         authenticatedCipher.doFinal(wrapped.copyOfRange(NONCE_BYTES, wrapped.size))
     } catch (e: KeyPermanentlyInvalidatedException) {
         throw BiometricKeyInvalidatedException("keystore key permanently invalidated", e)

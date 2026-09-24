@@ -140,7 +140,7 @@ private fun biometricUnlockAction(viewModel: VaultViewModel): (() -> Unit)? {
         scope.launch {
             val challenge = viewModel.beginBiometricUnlock().getOrNull() ?: return@launch
             try {
-                val cipher = authenticator.authenticateDecryptCipher()
+                val cipher = authenticator.authenticateDecryptCipher(challenge.wrappedDek)
                 viewModel.completeBiometricUnlock(challenge, cipher)
             } catch (e: BiometricAuthException) {
                 viewModel.onBiometricAuthError(e.error)

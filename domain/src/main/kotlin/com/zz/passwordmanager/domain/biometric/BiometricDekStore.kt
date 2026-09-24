@@ -33,14 +33,21 @@ interface BiometricDekStore {
 
     /**
      * 为 `BiometricPrompt` + `CryptoObject` 预建解密 cipher。
+     *
      * **必须在任何用户认证之前调用**（密钥认证有效期为 0 秒 / validity -1）。
-     * 未认证时即抛 `UserNotAuthenticatedException`——这是 auth-per-use 的预期行为。
+     *
+     * @param wrapped 待解的密文（`nonce‖密文+tag`）。GCM 解密**必须连 IV 一起初始化**，
+     *   故 IV 只能从待解密文中取——这要求调用方先拿到挑战密文再建 cipher。
+     *   漏掉 IV 会得到 `InvalidKeyException: iv required when decrypting`（v0.10 实机踩坑）。
      */
-    fun createDecryptCipher(): Cipher
+    fun createDecryptCipher(wrapped: ByteArray): Cipher
 
     /**
      * 用**已通过认证**的 cipher 解出 DEK。
      * 传入未经认证的 cipher 会被 Keystore 拒绝。
+     *
+     * 实现方**不得重新 init** 该 cipher：`CryptoObject` 带来的认证状态绑定在这次
+     * 初始化上，重新 init 会冲掉它。
      *
      * @throws BiometricKeyInvalidatedException 密钥被系统作废（新录入指纹等）或密文校验失败
      */

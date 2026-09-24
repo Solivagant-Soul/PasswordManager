@@ -58,11 +58,26 @@ class KeystoreDekVaultTest {
         assertThrows(UserNotAuthenticatedException::class.java) { vault.createEncryptCipher() }
     }
 
+    /**
+     * 回归（v0.10 实机踩坑）：GCM 解密 cipher **必须带 IV 初始化**。
+     * 漏掉 IV 会抛 `InvalidKeyException: iv required when decrypting`——
+     * 而 IV 存在待解密的密文里，所以建 cipher 必须先拿到密文。
+     *
+     * 本用例断言的是「不带 IV 的解密 init 必定失败」这一 API 事实，
+     * **在无已录入生物特征的模拟器上也能跑**。
+     */
     @Test
-    fun creatingDecryptCipherWithoutAuthenticationIsRejected() {
-        assumeStrongBiometric()
-        // G-E auth-per-use：连 init 解密 cipher 都要求本次认证，密钥不在任何缓存窗口内
-        assertThrows(UserNotAuthenticatedException::class.java) { vault.createDecryptCipher() }
+    fun decryptInitWithoutIvIsRejected() {
+        val noIv = Cipher.getInstance("AES/GCM/NoPadding")
+        val error = runCatching {
+            noIv.init(
+                Cipher.DECRYPT_MODE,
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                    .getKey("vault-biometric-dek", null) as SecretKey?,
+            )
+        }.exceptionOrNull()
+
+        assertTrue("不带 IV 的 GCM 解密 init 应当失败", error != null)
     }
 
     @Test

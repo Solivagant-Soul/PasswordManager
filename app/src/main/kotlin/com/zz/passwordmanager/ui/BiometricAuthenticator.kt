@@ -37,8 +37,16 @@ class BiometricAuthenticator(
      * 取消/失败不视为错误处理上的异常，一律通过 [BiometricAuthException] 携带
      * 可静默降级的 [AuthError] 交由调用方决定是否提示（取消不应被当成错误提示用户）。
      */
-    suspend fun authenticateDecryptCipher(): Cipher =
-        authenticate(title = "解锁密码库", subtitle = "使用指纹或面容验证") { dekStore.createDecryptCipher() }
+    /**
+     * 解锁用。**必须传入待解的密文**：GCM 解密要在建 cipher 时就带上 IV，
+     * 而 IV 存在密文里（`nonce‖密文+tag`），只能由调用方取出后传入。
+     */
+    suspend fun authenticateDecryptCipher(wrapped: ByteArray): Cipher =
+        authenticate(
+            title = "解锁密码库",
+            subtitle = "使用指纹或面容验证",
+            setupFailure = AuthError.BiometricKeyInvalidated,
+        ) { dekStore.createDecryptCipher(wrapped) }
 
     /**
      * 开启快捷解锁时用：认证并返回**已认证的加密 cipher**（v0.10）。
@@ -48,22 +56,30 @@ class BiometricAuthenticator(
      * 避免「开了之后到解锁时才发现不可用」。
      */
     suspend fun authenticateEncryptCipher(): Cipher =
-        authenticate(title = "启用生物识别解锁", subtitle = "请先验证一次指纹或面容") {
-            dekStore.createEncryptCipher()
-        }
+        authenticate(
+            title = "启用生物识别解锁",
+            subtitle = "请先验证一次指纹或面容",
+            setupFailure = AuthError.BiometricSetupFailed("准备加密对象失败"),
+        ) { dekStore.createEncryptCipher() }
 
     private suspend fun authenticate(
         title: String,
         subtitle: String,
+        // 建 cipher 失败时该报什么错——开启与解锁路径的成因不同，v0.10 曾把
+        // 解锁路径的失败也标成「开启生物识别失败」，把排查带偏了
+        setupFailure: AuthError,
         createCipher: () -> Cipher,
     ): Cipher = suspendCancellableCoroutine { continuation ->
         // ① 认证前建 cipher（auth-per-use 的时序要求）
         val cipher = try {
             createCipher()
         } catch (e: Exception) {
-            continuation.resumeWithException(
-                BiometricAuthException(AuthError.BiometricSetupFailed("${e.javaClass.simpleName}: ${e.message}")),
-            )
+            val error = when (setupFailure) {
+                is AuthError.BiometricSetupFailed ->
+                    AuthError.BiometricSetupFailed("${e.javaClass.simpleName}: ${e.message}")
+                else -> setupFailure
+            }
+            continuation.resumeWithException(BiometricAuthException(error))
             return@suspendCancellableCoroutine
         }
 
@@ -74,7 +90,7 @@ class BiometricAuthenticator(
                 val authenticated = result.cryptoObject?.cipher
                 if (authenticated == null) {
                     continuation.resumeWithException(
-                        BiometricAuthException(AuthError.BiometricSetupFailed("认证成功但未返回加密对象")),
+                        BiometricAuthException(setupFailure),
                     )
                 } else {
                     continuation.resume(authenticated)
