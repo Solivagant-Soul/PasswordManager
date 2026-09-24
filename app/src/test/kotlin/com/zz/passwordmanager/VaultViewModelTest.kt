@@ -1,5 +1,7 @@
 package com.zz.passwordmanager
 
+import com.zz.passwordmanager.data.biometric.BiometricToggle
+import com.zz.passwordmanager.data.biometric.UnlockWithBiometric
 import com.zz.passwordmanager.data.header.HeaderIntegrityException
 import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.DestroyVault
@@ -13,6 +15,7 @@ import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultStatus
+import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
 import com.zz.passwordmanager.ui.UnlockFormData
@@ -51,12 +54,18 @@ class VaultViewModelTest {
     private val resetVault: ResetVault = mockk(relaxed = true)
     private val changeMasterPassword: ChangeMasterPassword = mockk(relaxed = true)
     private val readSecurityQuestions: ReadSecurityQuestions = mockk(relaxed = true)
+    private val unlockWithBiometric: UnlockWithBiometric = mockk(relaxed = true)
+    private val biometricToggle: BiometricToggle = mockk(relaxed = true)
+    private val gate: BiometricGate = mockk { every { availability() } returns BiometricGate.Availability.AVAILABLE }
     private val repository: EntryRepository = mockk()
     private val clipboard: AndroidClipboardBridge = mockk(relaxed = true)
     // V1-1：VM 现在在 init 里 collect sessionManager.state。relaxed mock 的 state
     // 拿不到可 collect 的 StateFlow，会让 collector 崩——改用真实实例（纯 Kotlin，无 Android 依赖）。
     private val sessionManager = VaultSessionManager()
-    private val status: VaultStatus = mockk { every { isInitialized() } returns true }
+    private val status: VaultStatus = mockk {
+        every { isInitialized() } returns true
+        every { isBiometricEnabled() } returns false
+    }
 
 
     private lateinit var viewModel: VaultViewModel
@@ -67,6 +76,7 @@ class VaultViewModelTest {
         viewModel = VaultViewModel(
             unlockVault, initializeVault, destroyVault, resetVault,
             changeMasterPassword, readSecurityQuestions,
+            unlockWithBiometric, biometricToggle, gate,
             repository, clipboard, sessionManager, status,
         )
     }

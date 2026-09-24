@@ -6,9 +6,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import com.zz.passwordmanager.AppApplication
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zz.passwordmanager.domain.entries.EntryDetail
+import kotlinx.coroutines.launch
 
 /** 手写轻量导航（M2 决策）：sealed Screen + 回退栈；3 屏规模不引 navigation-compose。 */
 sealed interface Screen {
@@ -41,6 +46,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
             onBeginRecovery = viewModel::beginRecovery,
             onRecover = viewModel::recoverVault,
             onCancelRecovery = viewModel::cancelRecovery,
+            onBiometricUnlock = biometricUnlockAction(viewModel),
         )
         return
     }
@@ -63,6 +69,8 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
             SettingsScreen(
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
+                biometricEnabled = state.biometricEnabled,
+                onSetBiometric = viewModel::setBiometricEnabled,
                 onChangeMasterPassword = { current, new, confirm ->
                     viewModel.submitMasterPasswordChange(current, new, confirm) {
                         backStack.removeAt(backStack.lastIndex)
@@ -107,4 +115,33 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
 private fun rememberDetailState(entryId: String?, viewModel: VaultViewModel): EntryDetail? {
     LaunchedEffect(entryId) { entryId?.let(viewModel::loadDetail) }
     return entryId?.let(viewModel::detailFor)
+}
+
+/**
+ * 生物识别解锁的编排（FR-2/V1-4）：用例第一段资格判定 → `BiometricPrompt` 认证
+ * → 用例第二段用已认证 cipher 建会话。
+ *
+ * 认证本身需要 Activity 上下文（`BiometricPrompt` 硬要求 FragmentActivity），
+ * 只能在组合层驱动；用例只管数据与状态，故这里是唯一的编排点。
+ */
+@Composable
+private fun biometricUnlockAction(viewModel: VaultViewModel): (() -> Unit)? {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val activity = context as? FragmentActivity ?: return null
+    val dekStore = (activity.application as? AppApplication)?.biometricDekStore
+    if (dekStore == null) return null
+    val authenticator = remember(activity, dekStore) { BiometricAuthenticator(activity, dekStore) }
+
+    return {
+        scope.launch {
+            val challenge = viewModel.beginBiometricUnlock().getOrNull() ?: return@launch
+            try {
+                val cipher = authenticator.authenticateDecryptCipher()
+                viewModel.completeBiometricUnlock(challenge, cipher)
+            } catch (e: BiometricAuthException) {
+                viewModel.onBiometricAuthError(e.error)
+            }
+        }
+    }
 }

@@ -2,8 +2,12 @@ package com.zz.passwordmanager.platform.biometric
 
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
+import com.zz.passwordmanager.domain.biometric.BiometricDekStore
+import com.zz.passwordmanager.domain.biometric.BiometricKeyInvalidatedException
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -21,12 +25,16 @@ import javax.crypto.spec.GCMParameterSpec
  *   这是 auth-per-use 的安全要点：密钥操作与本次认证绑定，无法在认证后另行使用。
  *
  * 其余语义不变：
- * - 新指纹录入使密钥失效（平台默认）→ 快捷解锁降级主密码（S14）；
- * - wrap 无需认证（持有效主密码会话即可写），unwrap 需认证通过。
+ * - 新指纹录入使密钥失效（平台默认）→ 快捷解锁降级主密码（S14），由 [unwrap] 抛
+ *   [BiometricKeyInvalidatedException] 表达，调用方自愈关开关；
+ * - wrap 无需认证（持有效主密码会话即可写）。
+ *
+ * 直接实现 :domain 的 [BiometricDekStore] 端口——与 `AndroidBiometricGate : BiometricGate`
+ * 同构，不另建适配层。别名常量私有化在本类内，故 [deleteKey] 也放这里，避免字面量漂移。
  */
-class KeystoreDekVault {
+class KeystoreDekVault : BiometricDekStore {
 
-    fun wrap(dek: ByteArray): ByteArray {
+    override fun wrap(dek: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val sealed = cipher.doFinal(dek)
@@ -39,20 +47,33 @@ class KeystoreDekVault {
      * `result.cryptoObject!!.cipher` 传给 [unwrap]。未认证时本方法即会抛
      * `UserNotAuthenticatedException`（auth-per-use 的预期行为）。
      */
-    fun createDecryptCipher(): Cipher =
+    override fun createDecryptCipher(): Cipher =
         Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.DECRYPT_MODE, getOrCreateKey()) }
 
     /**
      * 用**已通过认证**的 cipher 解出 DEK。
      * 传入未经认证的 cipher 会被 Keystore 拒绝（抛 UserNotAuthenticatedException）。
+     *
+     * 密钥失效（新录入指纹）或 GCM 校验失败（密文被篡改）都归一为
+     * [BiometricKeyInvalidatedException]：调用方据此自愈关闭开关并降级主密码。
+     * 不把底层异常类型泄给调用方，避免把「篡改」与「密钥失效」区分开来成为 oracle。
      */
-    fun unwrap(wrapped: ByteArray, authenticatedCipher: Cipher): ByteArray {
+    override fun unwrap(wrapped: ByteArray, authenticatedCipher: Cipher): ByteArray = try {
         authenticatedCipher.init(
             Cipher.DECRYPT_MODE,
             getOrCreateKey(),
             GCMParameterSpec(TAG_BITS, wrapped.copyOf(NONCE_BYTES)),
         )
-        return authenticatedCipher.doFinal(wrapped.copyOfRange(NONCE_BYTES, wrapped.size))
+        authenticatedCipher.doFinal(wrapped.copyOfRange(NONCE_BYTES, wrapped.size))
+    } catch (e: KeyPermanentlyInvalidatedException) {
+        throw BiometricKeyInvalidatedException("keystore key permanently invalidated", e)
+    } catch (e: AEADBadTagException) {
+        throw BiometricKeyInvalidatedException("biometric-wrapped dek failed authentication", e)
+    }
+
+    /** 删除 Keystore 密钥别名。幂等：不存在时静默返回。 */
+    override fun deleteKey() {
+        KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.deleteEntry(ALIAS)
     }
 
     private fun getOrCreateKey(): SecretKey {

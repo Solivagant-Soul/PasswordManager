@@ -54,6 +54,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
 
+    // 生物识别快捷解锁（V1-4）：BiometricPrompt 需要 FragmentActivity；
+    // :platform 的 implementation 依赖不传递，:app 必须自己声明
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.fragment.ktx)
+
     // Compose BOM 统一管理 Compose 系版本
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +39,7 @@ fun UnlockScreen(
     onBeginRecovery: () -> Unit = {},
     onRecover: (answers: List<CharArray>, newPassword: String, confirm: String) -> Unit = { _, _, _ -> },
     onCancelRecovery: () -> Unit = {},
+    onBiometricUnlock: (() -> Unit)? = null,
 ) {
     if (state.vaultCorrupted) {
         CorruptedVaultNotice(onDestroyVault = onDestroyVault)
@@ -118,6 +120,17 @@ fun UnlockScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (state.initialized) "解锁" else "创建")
+        }
+
+        // FR-2 生物识别快捷解锁：只是加速器，主密码输入框与「解锁」按钮**任何时候都保留**
+        if (state.biometricAvailable && onBiometricUnlock != null) {
+            OutlinedButton(
+                onClick = onBiometricUnlock,
+                enabled = !state.biometricAuthenticating,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (state.biometricAuthenticating) "正在验证…" else "指纹 / 面容解锁")
+            }
         }
 
         // FR-12 找回入口：仅已初始化时可用（未初始化时无密保可答）

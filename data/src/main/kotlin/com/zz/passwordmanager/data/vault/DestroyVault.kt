@@ -2,6 +2,7 @@ package com.zz.passwordmanager.data.vault
 
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
 import com.zz.passwordmanager.data.header.VaultHeaderStore
+import com.zz.passwordmanager.domain.biometric.BiometricDekStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,6 +21,7 @@ import kotlinx.coroutines.withContext
 class DestroyVault(
     private val headerStore: VaultHeaderStore,
     private val dbProvider: VaultDatabaseProvider,
+    private val dekStore: BiometricDekStore? = null,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
@@ -27,6 +29,9 @@ class DestroyVault(
         runCatching {
             dbProvider.delete()
             headerStore.delete()
+            // 「清除重建」是唯一能物理删除全部凭证的入口，漏掉会留下无主的 Keystore 密钥
+            dekStore?.deleteKey()
+            Unit // deleteKey 返回 Unit?，显式收敛为 Result<Unit>
         }
     }
 }

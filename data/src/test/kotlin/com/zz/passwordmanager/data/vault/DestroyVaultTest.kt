@@ -5,6 +5,7 @@ import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
 import com.zz.passwordmanager.data.header.KdfParams
 import com.zz.passwordmanager.data.header.VaultHeaderStore
+import com.zz.passwordmanager.domain.biometric.BiometricDekStore
 import io.mockk.mockk
 import io.mockk.verify
 import java.security.SecureRandom
@@ -30,8 +31,9 @@ class DestroyVaultTest {
     private val keyManager: KeyManager = Argon2KeyManager(recoveryKdfParams = SMALL)
     private val headerStore get() = VaultHeaderStore(tmp.root, macKey)
     private val dbProvider: VaultDatabaseProvider = mockk(relaxed = true)
+    private val dekStore: BiometricDekStore = mockk(relaxed = true)
     // 用例须延迟构造：field 初始化时 TemporaryFolder 尚未创建 root
-    private val destroyVault get() = DestroyVault(headerStore, dbProvider, UnconfinedTestDispatcher())
+    private val destroyVault get() = DestroyVault(headerStore, dbProvider, dekStore, UnconfinedTestDispatcher())
 
     @Before
     fun initialize() = runTest {
@@ -55,6 +57,9 @@ class DestroyVaultTest {
         // Header 消失 → VaultStatus 转「未初始化」，用户可重新建库
         assertNull(headerStore.read())
         verify(exactly = 1) { dbProvider.delete() }
+        // 清除重建是唯一能物理删除全部凭证的入口：Keystore 别名也必须删，
+        // 否则留下一枚无主密钥
+        verify(exactly = 1) { dekStore.deleteKey() }
     }
 
     @Test

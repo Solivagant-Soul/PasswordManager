@@ -9,11 +9,15 @@ import com.zz.passwordmanager.data.vault.InitializeRequest
 import com.zz.passwordmanager.data.vault.InitializeVault
 import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.AuthThrottle
+import com.zz.passwordmanager.domain.biometric.BiometricDekStore
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import io.mockk.every
+import io.mockk.verify
 import io.mockk.mockk
 import java.security.SecureRandom
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -33,7 +37,11 @@ class BiometricToggleTest {
     private val gate = mockk<BiometricGate>()
     private val password = "Passw0rd!主密码".toCharArray()
 
-    private fun toggle() = BiometricToggle(keyManager, headerStore, throttle, gate)
+    private val dekStore: BiometricDekStore = mockk(relaxed = true) {
+        every { wrap(any()) } answers { firstArg<ByteArray>().reversedArray() }
+    }
+
+    private fun toggle() = BiometricToggle(keyManager, headerStore, throttle, gate, dekStore)
 
     private suspend fun initialize() {
         assertTrue(
@@ -100,6 +108,50 @@ class BiometricToggleTest {
         val result = toggle()(enable = true, masterPassword = "wrong".toCharArray())
 
         assertTrue((result.exceptionOrNull() as AuthException).error is AuthError.WrongPassword)
+    }
+
+    // ---- V1-4：包裹密文必须真的落库，关闭时必须清干净 ----
+
+    @Test
+    fun `enable stores the keystore-wrapped dek alongside the switch`() = runTest {
+        initialize()
+        every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
+
+        assertTrue(toggle()(enable = true, masterPassword = password).isSuccess)
+
+        val header = headerStore.read()!!
+        assertTrue(header.biometricEnabled)
+        // 此前 BiometricToggle 只翻开关、从不 wrap，「快捷解锁」在数据层根本没闭环
+        assertNotNull("开启后应存有 Keystore 包裹密文", header.wrappedDekBiometric)
+        assertTrue(header.wrappedDekBiometric!!.isNotEmpty())
+    }
+
+    @Test
+    fun `disable clears the wrapped dek and deletes the keystore key`() = runTest {
+        initialize()
+        every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
+        toggle()(enable = true, masterPassword = password)
+
+        assertTrue(toggle()(enable = false, masterPassword = password).isSuccess)
+
+        val header = headerStore.read()!!
+        assertNull("关闭后不应残留包裹密文", header.wrappedDekBiometric)
+        assertTrue(header.biometricEnabled.not())
+        // 残留 Keystore 密钥是无主凭证
+        verify { dekStore.deleteKey() }
+    }
+
+    @Test
+    fun `failing keystore wrap surfaces as unavailable rather than half enabling`() = runTest {
+        initialize()
+        every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
+        every { dekStore.wrap(any()) } throws IllegalStateException("keystore refused")
+
+        val result = toggle()(enable = true, masterPassword = password)
+
+        assertTrue((result.exceptionOrNull() as AuthException).error is AuthError.BiometricUnavailable)
+        // 失败时不得留下「开关开了但没密文」的中间态
+        assertTrue(headerStore.read()!!.biometricEnabled.not())
     }
 
     private companion object {

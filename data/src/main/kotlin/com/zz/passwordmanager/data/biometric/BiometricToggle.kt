@@ -6,7 +6,7 @@ import com.zz.passwordmanager.data.header.VaultHeaderStore
 import com.zz.passwordmanager.data.vault.AuthError
 import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.AuthThrottle
-import com.zz.passwordmanager.data.vault.Issue
+import com.zz.passwordmanager.domain.biometric.BiometricDekStore
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +22,7 @@ class BiometricToggle(
     private val headerStore: VaultHeaderStore,
     private val throttle: AuthThrottle,
     private val gate: BiometricGate,
+    private val dekStore: BiometricDekStore,
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
@@ -36,8 +37,8 @@ class BiometricToggle(
             return Result.failure(AuthException(AuthError.LockedUntil(it)))
         }
 
-        // P-03：验证当前主密码（失败计入共享限流）
-        try {
+        // P-03：验证当前主密码（失败计入共享限流）；解出的 DEK 正是待包裹的快捷副本
+        val dek = try {
             val kek = keyManager.deriveKek(masterPassword, header.saltKdf, header.kdfParams)
             keyManager.unwrapDek(header.wrappedDekMaster, kek)
         } catch (e: KeyUnwrapException) {
@@ -57,7 +58,26 @@ class BiometricToggle(
             )
         }
 
-        headerStore.write(throttle.onAuthSuccess(header.copy(biometricEnabled = enable)))
+        // Keystore 拒绝建密钥等失败归为 BiometricUnavailable：UI 已有对应文案
+        val wrapped = if (enable) {
+            runCatching { dekStore.wrap(dek) }.getOrElse {
+                return Result.failure(AuthException(AuthError.BiometricUnavailable(gate.availability())))
+            }
+        } else {
+            null
+        }
+
+        // 开关位与被包裹密文**一次原子写**：避免「开关开了但密文没写成功」的中间态
+        headerStore.write(
+            throttle.onAuthSuccess(
+                header.copy(biometricEnabled = enable, wrappedDekBiometric = wrapped),
+            ),
+        )
+        // 先清 Header 再删 Keystore 密钥：反过来的崩溃窗口会留下「开关开着、密钥没了」
+        // 的永久锁死状态。关闭时密钥是残留的无主凭证，必须清。
+        if (!enable) {
+            runCatching { dekStore.deleteKey() }
+        }
         return Result.success(Unit)
     }
 }

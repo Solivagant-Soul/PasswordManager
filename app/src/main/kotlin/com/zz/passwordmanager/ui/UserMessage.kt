@@ -43,6 +43,11 @@ private fun authMessage(error: AuthError): String = when (error) {
         "密保答案错误"
     }
     is AuthError.Invalid -> invalidMessage(error.issues.map { it.message })
+    AuthError.BiometricNotEnabled -> "生物识别解锁未开启"
+    // 取消/单次识别未通过由 VM 静默处理，不会走到这里；留兜底文案
+    AuthError.BiometricCancelled -> "已取消生物识别，请用主密码解锁"
+    AuthError.BiometricLockedOut -> "生物识别已锁定，请用主密码解锁"
+    AuthError.BiometricKeyInvalidated -> "生物识别已失效，请用主密码解锁后在设置中重新开启"
     is AuthError.BiometricUnavailable -> when (error.availability) {
         BiometricGate.Availability.AVAILABLE -> "生物识别不可用，请用主密码解锁"
         BiometricGate.Availability.NO_HARDWARE -> "本机没有指纹/面容硬件，请用主密码解锁"

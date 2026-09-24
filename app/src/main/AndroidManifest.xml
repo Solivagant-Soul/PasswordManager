@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      生物识别快捷解锁（FR-2）。两者都是 normal 权限，无需运行时申请。
+      USE_BIOMETRIC 自 API 28 引入，不加 minSdkVersion 限定（加了反而在 26/27 失效）；
+      USE_FINGERPRINT 是 26–28 的兼容路径，28+ 框架自动授予 USE_BIOMETRIC。
+    -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission
+        android:name="android.permission.USE_FINGERPRINT"
+        android:maxSdkVersion="28" />
+
+    <!-- 生物识别是可选特性，不声明 required，避免在无硬件设备上被商店过滤 -->
+    <uses-feature
+        android:name="android.hardware.fingerprint"
+        android:required="false" />
+
     <application
         android:name=".AppApplication"
         android:allowBackup="false"

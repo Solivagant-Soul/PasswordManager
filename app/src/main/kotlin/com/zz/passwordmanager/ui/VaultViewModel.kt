@@ -3,7 +3,12 @@ package com.zz.passwordmanager.ui
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zz.passwordmanager.data.biometric.BiometricChallenge
+import com.zz.passwordmanager.data.biometric.BiometricToggle
+import com.zz.passwordmanager.data.biometric.UnlockWithBiometric
 import com.zz.passwordmanager.data.header.HeaderIntegrityException
+import com.zz.passwordmanager.data.vault.AuthError
+import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.DestroyVault
 import com.zz.passwordmanager.data.vault.InitializeRequest
@@ -15,12 +20,14 @@ import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultStatus
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
+import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.entries.EntrySummary
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.crypto.Cipher
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +59,12 @@ data class VaultUiState(
     val recovering: Boolean = false,
     /** 密保问题文本（仅问题，答案从不落盘 D4）。 */
     val recoveryQuestions: List<String> = emptyList(),
+    /** FR-2 生物识别是否已开启（设置页开关读它；不含硬件就绪判断）。 */
+    val biometricEnabled: Boolean = false,
+    /** FR-2 生物识别快捷解锁入口是否可用（已开启且硬件就绪）。 */
+    val biometricAvailable: Boolean = false,
+    /** 认证进行中：避免重复点击弹出多个提示框。 */
+    val biometricAuthenticating: Boolean = false,
 )
 
 /**
@@ -66,16 +79,20 @@ class VaultViewModel @Inject constructor(
     private val resetVault: ResetVault,
     private val changeMasterPassword: ChangeMasterPassword,
     private val readSecurityQuestions: ReadSecurityQuestions,
+    private val unlockWithBiometric: UnlockWithBiometric,
+    private val biometricToggle: BiometricToggle,
+    private val gate: BiometricGate,
     private val entryRepository: EntryRepository,
     private val clipboard: AndroidClipboardBridge,
     private val sessionManager: VaultSessionManager,
-    status: VaultStatus,
+    private val status: VaultStatus,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VaultUiState(initialized = status.isInitialized()))
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
 
     init {
+        refreshBiometricAvailability()
         // 锁定以 VaultSessionManager 为单一事实来源：任何路径的锁定（FR-8 自动锁定、
         // 密保找回失败后的锁定等）都要反映到 UI，并清空已解密的数据。
         viewModelScope.launch {
@@ -158,6 +175,70 @@ class VaultViewModel @Inject constructor(
                         )
                     }
                 },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
+            )
+        }
+    }
+
+    // ---- FR-2 生物识别快捷解锁（V1-4） ----
+
+    /**
+     * 开始生物识别解锁第一段：资格判定。UI 据此决定是否弹提示框。
+     * 认证本身（BiometricPrompt）由 :app 的 [BiometricAuthenticator] 驱动，
+     * 因为它需要 Activity 上下文。
+     *
+     * suspend 而非 runBlocking——用例内部已切到 IO 调度器，调用方在 Main。
+     */
+    suspend fun beginBiometricUnlock(): Result<BiometricChallenge> {
+        _state.update { it.copy(biometricAuthenticating = true, errorMessage = null) }
+        val result = unlockWithBiometric.prepare()
+        result.onFailure { finishBiometric(it) }
+        return result
+    }
+
+    /** 认证成功后完成解锁：用**已认证**的 cipher 解出 DEK 并建立会话。 */
+    fun completeBiometricUnlock(challenge: BiometricChallenge, authenticatedCipher: Cipher) {
+        viewModelScope.launch {
+            unlockWithBiometric(challenge, authenticatedCipher).fold(
+                onSuccess = { session ->
+                    sessionManager.begin(session)
+                    _state.update { it.copy(biometricAuthenticating = false) }
+                    search(_state.value.query)
+                },
+                onFailure = { e -> finishBiometric(e) },
+            )
+        }
+    }
+
+    /** UI 侧认证失败/取消：按 [AuthError] 决定静默降级还是提示。 */
+    fun onBiometricAuthError(error: AuthError) {
+        when (error) {
+            // 取消是用户自己的选择，不该弹错误训斥；主密码入口始终保留（生物识别只是加速器）
+            AuthError.BiometricCancelled -> _state.update { it.copy(biometricAuthenticating = false) }
+            else -> finishBiometric(AuthException(error))
+        }
+    }
+
+    private fun finishBiometric(e: Throwable) {
+        _state.update { it.copy(biometricAuthenticating = false, errorMessage = userMessage(e)) }
+        refreshBiometricAvailability()
+    }
+
+    /**
+     * 重算快捷解锁入口的可见性：在 init、每次回到锁定态、以及生物识别失败后重算——
+     * 用户可能刚在系统设置里改了录入情况（新增指纹会使旧 Keystore 密钥永久失效）。
+     */
+    fun refreshBiometricAvailability() {
+        val enabled = status.isBiometricEnabled()
+        val available = enabled && gate.availability() == BiometricGate.Availability.AVAILABLE
+        _state.update { it.copy(biometricEnabled = enabled, biometricAvailable = available) }
+    }
+
+    /** P-03：开启/关闭生物识别快捷解锁，须验当前主密码。 */
+    fun setBiometricEnabled(enable: Boolean, masterPassword: String) {
+        viewModelScope.launch {
+            biometricToggle(enable, masterPassword.toCharArray()).fold(
+                onSuccess = { refreshBiometricAvailability() },
                 onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }

@@ -1,6 +1,8 @@
 package com.zz.passwordmanager.di
 
 import android.content.Context
+import com.zz.passwordmanager.data.biometric.BiometricToggle
+import com.zz.passwordmanager.data.biometric.UnlockWithBiometric
 import com.zz.passwordmanager.data.crypto.Argon2KeyManager
 import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
@@ -17,8 +19,12 @@ import com.zz.passwordmanager.data.vault.ResetVault
 import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultStatus
+import com.zz.passwordmanager.domain.biometric.BiometricDekStore
+import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
+import com.zz.passwordmanager.platform.biometric.AndroidBiometricGate
+import com.zz.passwordmanager.platform.biometric.KeystoreDekVault
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -113,7 +119,36 @@ object AppModule {
     fun provideDestroyVault(
         store: VaultHeaderStore,
         provider: VaultDatabaseProvider,
-    ): DestroyVault = DestroyVault(store, provider)
+        dekStore: BiometricDekStore,
+    ): DestroyVault = DestroyVault(store, provider, dekStore)
+
+    // ---- FR-2 生物识别快捷解锁（V1-4） ----
+
+    @Provides
+    @Singleton
+    fun provideBiometricGate(@ApplicationContext context: Context): BiometricGate =
+        AndroidBiometricGate(context)
+
+    @Provides
+    @Singleton
+    fun provideBiometricDekStore(): BiometricDekStore = KeystoreDekVault()
+
+    @Provides
+    fun provideBiometricToggle(
+        keyManager: KeyManager,
+        store: VaultHeaderStore,
+        throttle: AuthThrottle,
+        gate: BiometricGate,
+        dekStore: BiometricDekStore,
+    ): BiometricToggle = BiometricToggle(keyManager, store, throttle, gate, dekStore)
+
+    @Provides
+    fun provideUnlockWithBiometric(
+        store: VaultHeaderStore,
+        throttle: AuthThrottle,
+        dekStore: BiometricDekStore,
+        gate: BiometricGate,
+    ): UnlockWithBiometric = UnlockWithBiometric(store, throttle, dekStore, gate)
 
     @Provides
     @Singleton

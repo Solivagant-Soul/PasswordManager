@@ -10,4 +10,13 @@ class VaultStatus(private val headerStore: VaultHeaderStore) {
      * 不得误入初始化流程覆盖既有库。
      */
     fun isInitialized(): Boolean = runCatching { headerStore.read() }.fold({ it != null }, { true })
+
+    /**
+     * 生物识别快捷解锁是否已开启。
+     *
+     * 只回布尔值、**不把整个 Header 泄给 :app**（Header 含盐与被包裹的 DEK，
+     * 即便加密也不该离开数据层）。读取失败一律按「未开启」处理。
+     */
+    fun isBiometricEnabled(): Boolean =
+        runCatching { headerStore.read()?.biometricEnabled == true }.getOrDefault(false)
 }

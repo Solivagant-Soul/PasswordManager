@@ -31,6 +31,14 @@ sealed interface AuthError {
     data class WrongAnswers(val attemptsRemaining: Int) : AuthError
     data class Invalid(val issues: List<Issue>) : AuthError
     data class BiometricUnavailable(val availability: BiometricGate.Availability) : AuthError
+    /** 快捷解锁未开启（UI 隐藏入口，不提示）。 */
+    data object BiometricNotEnabled : AuthError
+    /** 用户取消/点负按钮/单次识别未通过 → 静默降级主密码，不弹错误（不训斥用户）。 */
+    data object BiometricCancelled : AuthError
+    /** 系统级锁定（多次失败）→ 提示改用主密码，按钮保留。 */
+    data object BiometricLockedOut : AuthError
+    /** 快捷密钥失效（新录入指纹）或密文校验失败 → 已自愈关闭开关，提示重开。 */
+    data object BiometricKeyInvalidated : AuthError
 }
 
 class AuthException(val error: AuthError) : Exception(error.toString())
