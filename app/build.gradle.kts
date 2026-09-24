@@ -6,6 +6,13 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// 自签 keystore：优先 Gradle 属性（-PVAULT_KEYSTORE=…），其次环境变量。
+// 口令同理。两者都**不入库**，本机用 local.properties 的 sdk.dir 之外另配或用环境变量。
+fun vaultKeystoreValue(name: String): String? =
+    providers.gradleProperty(name).orNull ?: providers.environmentVariable(name).orNull
+
+val vaultKeystorePath: String? = vaultKeystoreValue("VAULT_KEYSTORE")?.takeIf { file(it).exists() }
+
 android {
     namespace = "com.zz.passwordmanager"
     compileSdk = 35
@@ -18,13 +25,37 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // v1 个人自用签名（2026-09-24 决策：不上应用商店，故只求「可安装 + 不可调试」）。
+        // keystore 路径与口令经 Gradle 属性或环境变量传入，**不入库**；
+        // 未配置时下方 buildTypes 回落到 debug 签名，以免阻塞首次出包。
+        create("selfSigned") {
+            val storePath = vaultKeystorePath
+            if (storePath != null) {
+                storeFile = file(storePath)
+                storePassword = vaultKeystoreValue("VAULT_KEYSTORE_PASSWORD")
+                keyAlias = vaultKeystoreValue("VAULT_KEY_ALIAS")
+                keyPassword = vaultKeystoreValue("VAULT_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // 暂不开 R8：Compose/Hilt/序列化规则尚未跑通，开混淆会在 v1 引入无法排查的崩溃
             isMinifyEnabled = false
+            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (vaultKeystorePath != null) {
+                signingConfigs.getByName("selfSigned")
+            } else {
+                // 无自签 keystore 时用 debug 签名保证可安装；此时 APK 是 debuggable 的，
+                // 正式自用请务必配置 VAULT_KEYSTORE 后重新出包
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

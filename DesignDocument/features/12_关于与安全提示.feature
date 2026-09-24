@@ -9,6 +9,7 @@ Feature: 关于与安全提示
     Then 系统展示版本号
     And 展示「数据仅存本机」的说明
 
+  @phase-2  # root 检测属 T29 硬化，移二期
   Scenario: 越狱或 root 设备风险提示
     Given 用户在越狱或 root 设备上运行 App
     When 系统检测到越狱或 root

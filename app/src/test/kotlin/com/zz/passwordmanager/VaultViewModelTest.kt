@@ -213,6 +213,28 @@ class VaultViewModelTest {
         assertTrue(sessionManager.state.value is VaultState.Locked)
     }
 
+    @Test
+    fun `successful initialization marks the vault initialized and enters it`() = runTest(dispatcher) {
+        // 首次创建时 status.isInitialized() 为 false（VaultUiState 的初值）
+        every { status.isInitialized() } returns false
+        viewModel = VaultViewModel(
+            unlockVault, initializeVault, destroyVault, resetVault,
+            changeMasterPassword, readSecurityQuestions,
+            unlockWithBiometric, biometricToggle, gate,
+            repository, clipboard, sessionManager, status,
+        )
+        stubSearch()
+        coEvery { initializeVault(any()) } returns Result.success(Unit)
+        coEvery { unlockVault(any()) } returns Result.success(mockk(relaxed = true))
+
+        viewModel.initialize(UnlockFormData(masterPassword = "pw", confirm = "pw"))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        // 设备走查发现：initialized 只在构造时读一次，首次创建后 UI 仍停在创建表单
+        assertTrue(viewModel.state.first().initialized)
+        assertFalse(viewModel.state.first().locked)
+    }
+
     // ---- V1-2 FR-12 密保找回 / V1-3 P-07 修改主密码 ----
 
     @Test

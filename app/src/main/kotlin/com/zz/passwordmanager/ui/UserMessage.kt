@@ -62,15 +62,22 @@ private fun lockMessage(remainingMs: Long): String {
     return if (minutes > 0) "尝试过多，请 $minutes 分 $seconds 秒后重试" else "尝试过多，请 $seconds 秒后重试"
 }
 
-/** 把内部校验串归并成人话；只暴露「哪一项有问题」，不暴露内部规则常量。 */
-private fun invalidMessage(issues: List<String>): String = when {
-    issues.isEmpty() -> "输入不符合要求"
-    issues.any { it.contains("mismatch") } -> "两次输入不一致"
-    issues.any { it.contains("securityQuestions") } -> "密保问题或答案不符合要求（需 3 道，答案不超过 60 字）"
-    issues.any { it.contains("title") } -> "标题必填且不超过 100 字"
-    issues.any { it.contains("password") || it.contains("newPassword") } ->
-        "密码至少 8 位，且需包含大写、小写、数字、符号中的两类"
-    issues.any { it.contains("url") } -> "网址须以 http:// 或 https:// 开头"
-    issues.any { it.contains("tags") } -> "标签最多 20 个"
-    else -> "输入不符合要求"
+/**
+ * 把内部校验串归并成人话；只暴露「哪一项有问题」，不暴露内部规则常量。
+ *
+ * 匹配一律**转小写后**比较：字段名大小写不统一（`masterPassword` / `newPassword`
+ * 都是驼峰），直接 `contains("password")` 会漏掉主密码类问题，一律落到兜底文案。
+ */
+private fun invalidMessage(issues: List<String>): String {
+    fun has(keyword: String) = issues.any { it.lowercase().contains(keyword) }
+    return when {
+        issues.isEmpty() -> "输入不符合要求"
+        has("mismatch") -> "两次输入不一致"
+        has("securityquestions") -> "密保问题或答案不符合要求（需 3 道，答案不超过 60 字）"
+        has("title") -> "标题必填且不超过 100 字"
+        has("password") -> "密码至少 8 位，且需包含大写、小写、数字、符号中的两类"
+        has("url") -> "网址须以 http:// 或 https:// 开头"
+        has("tags") -> "标签最多 20 个"
+        else -> "输入不符合要求"
+    }
 }

@@ -282,7 +282,12 @@ class VaultViewModel @Inject constructor(
                         },
                     ),
                 ).fold(
-                    onSuccess = { unlock(form.masterPassword) },
+                    onSuccess = {
+                        // initialized 原本只在构造时读一次 Header；首次创建后必须置位，
+                        // 否则 AppNav 仍按「未初始化」渲染创建表单（设备走查才发现）
+                        _state.update { it.copy(initialized = true) }
+                        unlock(form.masterPassword)
+                    },
                     onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
                 )
             } catch (e: HeaderIntegrityException) {

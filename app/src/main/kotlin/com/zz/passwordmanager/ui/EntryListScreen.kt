@@ -1,6 +1,7 @@
 package com.zz.passwordmanager.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.domain.entries.EntrySummary
@@ -46,17 +48,32 @@ fun EntryListScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(state.entries, key = { it.id }) { entry ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpen(entry.id) }
-                        .padding(vertical = 8.dp),
-                ) {
-                    Text(text = entry.title, style = MaterialTheme.typography.titleMedium)
-                    if (entry.username.isNotEmpty()) {
-                        Text(text = entry.username, style = MaterialTheme.typography.bodySmall)
+        // 空态：区分「库里还没有条目」与「搜索无结果」——两者的下一步动作不同
+        val isSearching = state.query.isNotBlank()
+        if (state.entries.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (isSearching) "未找到匹配「${state.query}」的条目" else "还没有条目，点击下方「新增条目」开始",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(24.dp),
+                )
+            }
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(state.entries, key = { it.id }) { entry ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpen(entry.id) }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Text(text = entry.title, style = MaterialTheme.typography.titleMedium)
+                        if (entry.username.isNotEmpty()) {
+                            Text(text = entry.username, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }

@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 需求/设计阶段已完成，代码阶段进行中：Android 工程位于仓库根目录，`DesignDocument/` 为设计文档目录。
 
-- 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑见 §7）。**当前进度：M0–M2 已完成（T01–T18）**——认证与密码库核心闭环（M1）、条目管理 CRUD/搜索/剪贴板（M2）。下一步 M3（T19–T21 密码生成器 / TOTP）。
+- 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑与批次划分见 §9）。
+- **当前进度：M0–M2 + v1 成品冲刺已完成（T01–T19）**。v1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
+- **交付形态：个人自用 APK**（不上应用商店，故无隐私政策与商店合规）。出包：`./gradlew :app:assembleRelease`；配置 `VAULT_KEYSTORE` 等 Gradle 属性后用自签证书，否则回落到 debug 签名（APK 仍可安装但可调试）。
 - 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
 - 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
 
@@ -19,6 +21,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # 仪器测试（需模拟器/真机；SQLCipher 为 native 库，JVM 单测无法覆盖）
 ./gradlew :data:connectedDebugAndroidTest :platform:connectedDebugAndroidTest
+
+# 出可安装 APK
+./gradlew :app:assembleRelease
 ```
 
 ## 工程约定
@@ -27,14 +32,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **androidTest 禁用反引号方法名**：`minSdk 26` 对应 DEX 038，不接受 SimpleName 中的空格，方法名必须 camelCase。JVM 单测（`src/test`）不受此限。
 - **数据层自持调度器**：Argon2 派生走 `Dispatchers.Default`、SQLCipher 与 Room 走 `Dispatchers.IO`（均在用例/仓库内部 `withContext`），调用方（ViewModel）不应选择调度器。
 - **Room 迁移**：`data/schemas/` 已导出并入库，且经 `sourceSets.androidTest.assets.srcDir` 挂载供 `MigrationTestHelper` 读取；改 schema 必须同时提交新 JSON 与迁移测试。
+- **设备走查**：App 开了 `FLAG_SECURE`，`screencap` 截出来是全黑（符合预期），
+  故 UI 验证改用 `adb shell uiautomator dump` 读无障碍树；用 `adb input` 输注时
+  软键盘会顶起布局，**每次操作前重新 dump 取坐标**，否则会点错字段。
 
 ## 权威文档（唯一事实来源）
 
-- `DesignDocument/密码管理App_需求规格说明书.md`（当前 v0.4）—— 产品需求的唯一规范，开发与验收均以此为准。
+- `DesignDocument/密码管理App_需求规格说明书.md`（当前 v0.7）—— 产品需求的唯一规范，开发与验收均以此为准。
 - `DesignDocument/features/*.feature` —— Gherkin 验收用例（对应 FR-1 ~ FR-12，覆盖正向/负向/异常/边界）。
 - `DesignDocument/openapi.yaml` —— 未来后端预留 OpenAPI 3.0 契约（当前纯本地、无服务端，仅作预留设计）。
 - `DesignDocument/架构视图.md` —— Mermaid 架构视图（系统上下文图、组件图、解锁与找回流程图）。
-- `DesignDocument/技术方案.md`（当前 v0.3）—— 技术选型、分层架构、数据模型、内部接口、任务拆解、风险与架构决策记录。
+- `DesignDocument/技术方案.md`（含 §9 批次划分与 §9.3 v1 交付记录）—— 技术选型、分层架构、数据模型、内部接口、任务拆解、风险与架构决策记录。
 - `DesignDocument/技术方案评审意见.md` —— 技术方案评审记录（含 B1/S1/S2/S3 等问题的处置）。
 - `DesignDocument/M1安全评审报告.md` —— M1 安全评审门禁（S-1 已修复；G-A~G-G 遗留项）。
 - `DesignDocument/遗留项与决策记录.md` —— 各里程碑遗留问题的处置状态与归属里程碑（含推迟理由）。
@@ -59,7 +67,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **认证**：主密码为根凭证 + 生物识别（指纹/面容）快速解锁；连续输错主密码 5 次锁定 1 分钟。
 - **找回**：忘记主密码凭 3 道密保问题全部答对 → **重置**主密码（原主密码本身不可取回）。
 - **功能范围**：条目增删改查、密码生成器、分类/标签/搜索、加密导入导出/备份。
-- **交付批次（2026-09-24 用户拍板）**：**TOTP 动态码、自动填充、CSV 导入属二期**，一期不实现。
+- **交付批次（2026-09-24 用户拍板）**：**TOTP 动态码、自动填充、CSV 导入、分类、标签、加密备份导出/导入、root 检测、无障碍与文案外置、商店发布准备，全部属二期**。
   需求与 Gherkin 场景均保留（`@phase-2` 标签），一期只交付其相关基础设施；
   预留设计与约束见 `技术方案.md` §9.2——**改数据模型或备份容器前先读该节**。
 - **关键边界**：条目上限 5000、密码必填且非空、主密码 ≥8 位且至少两类字符、剪贴板 30 秒自动清理、后台 1 分钟自动锁定、删除无回收站。
