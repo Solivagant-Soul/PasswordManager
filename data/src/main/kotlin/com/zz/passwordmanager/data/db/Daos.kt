@@ -27,7 +27,7 @@ interface EntryDao {
      * 包含式 LIKE 在 5000 条规模为有限全表扫描（索引服务等值/前缀与排序）。
      */
     @Query(
-        "SELECT id, title, username, url, categoryId FROM entries " +
+        "SELECT id, title, username, url, categoryId, favorite, type FROM entries " +
             "WHERE (:query = '' OR titleLower LIKE '%' || :query || '%' " +
             "OR usernameLower LIKE '%' || :query || '%' OR urlLower LIKE '%' || :query || '%') " +
             "AND (:categoryId IS NULL OR categoryId = :categoryId) " +
@@ -43,7 +43,7 @@ interface EntryDao {
      * 再手动 `refresh()`，跨页面变更不会自动反映。
      */
     @Query(
-        "SELECT id, title, username, url, categoryId FROM entries " +
+        "SELECT id, title, username, url, categoryId, favorite, type FROM entries " +
             "WHERE (:query = '' OR titleLower LIKE '%' || :query || '%' " +
             "OR usernameLower LIKE '%' || :query || '%' OR urlLower LIKE '%' || :query || '%') " +
             "AND (:categoryId IS NULL OR categoryId = :categoryId) " +
@@ -56,7 +56,7 @@ interface EntryDao {
 
     /** 标签过滤（JOIN entry_tags）+ 可选分类/搜索组合。 */
     @Query(
-        "SELECT e.id, e.title, e.username, e.url, e.categoryId FROM entries e " +
+        "SELECT e.id, e.title, e.username, e.url, e.categoryId, e.favorite, e.type FROM entries e " +
             "JOIN entry_tags t ON e.id = t.entryId " +
             "WHERE t.tagName = :tag " +
             "AND (:categoryId IS NULL OR e.categoryId = :categoryId) " +
@@ -68,7 +68,7 @@ interface EntryDao {
 
     /** 标签过滤的响应式版本（FR-18）。 */
     @Query(
-        "SELECT e.id, e.title, e.username, e.url, e.categoryId FROM entries e " +
+        "SELECT e.id, e.title, e.username, e.url, e.categoryId, e.favorite, e.type FROM entries e " +
             "JOIN entry_tags t ON e.id = t.entryId " +
             "WHERE t.tagName = :tag " +
             "AND (:categoryId IS NULL OR e.categoryId = :categoryId) " +
@@ -86,6 +86,8 @@ data class EntryRow(
     val username: String,
     val url: String?,
     val categoryId: String?,
+    val favorite: Boolean = false,
+    val type: String = "ACCOUNT",
 )
 
 @Dao

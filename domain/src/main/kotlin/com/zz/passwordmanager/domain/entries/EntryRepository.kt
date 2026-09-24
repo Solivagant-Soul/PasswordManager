@@ -9,7 +9,14 @@ data class EntrySummary(
     val username: String,
     val url: String?,
     val categoryId: String?,
-)
+    /** 收藏（FR-5）：列表提供独立筛选档。 */
+    val favorite: Boolean = false,
+    /** 类型（FR-15）：决定列表副标题的渲染方式。 */
+    val type: EntryType = EntryType.ACCOUNT,
+) {
+    /** 列表副标题：账号/WiFi 显示原文，银行卡/证件显示掩码。 */
+    val subtitle: String get() = type.subtitle(username)
+}
 
 /** 详情：密码明文经 [EntryRepository.revealPassword] 单独获取（掩码/显隐，FR-9）。 */
 data class EntryDetail(
@@ -21,6 +28,8 @@ data class EntryDetail(
     val categoryId: String?,
     val tags: List<String>,
     val totpEnabled: Boolean,
+    val favorite: Boolean = false,
+    val type: EntryType = EntryType.ACCOUNT,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -42,6 +51,10 @@ data class EntryInput(
     val categoryId: String?,
     val tags: List<String>,
     val totpSecret: CharArray? = null,
+    /** 收藏（FR-5）。 */
+    val favorite: Boolean = false,
+    /** 条目类型（FR-15）。 */
+    val type: EntryType = EntryType.ACCOUNT,
 )
 
 interface EntryRepository {

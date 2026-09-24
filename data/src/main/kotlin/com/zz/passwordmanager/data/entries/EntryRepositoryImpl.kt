@@ -14,6 +14,7 @@ import com.zz.passwordmanager.domain.entries.EntryIssue
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.entries.EntryRepositoryException
 import com.zz.passwordmanager.domain.entries.EntrySummary
+import com.zz.passwordmanager.domain.entries.EntryType
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +103,8 @@ class EntryRepositoryImpl(
                 urlLower = input.url?.trim()?.lowercase(),
                 notes = input.notes,
                 categoryId = input.categoryId,
+                favorite = input.favorite,
+                type = input.type.name,
                 // TOTP 密钥与密码同等加密（NFR-S7）；一期 UI 不传，取值恒 null
                 totpSecretCipher = input.totpSecret?.let {
                     keyManager.encrypt(it.concatToString().encodeToByteArray(), dek)
@@ -145,6 +148,8 @@ class EntryRepositoryImpl(
                 urlLower = input.url?.trim()?.lowercase(),
                 notes = input.notes,
                 categoryId = input.categoryId,
+                favorite = input.favorite,
+                type = input.type.name,
                 // null = 未提供，保留库中原有 TOTP 密钥（清除语义属二期 T21）
                 totpSecretCipher = input.totpSecret
                     ?.let { keyManager.encrypt(it.concatToString().encodeToByteArray(), dek) }
@@ -204,11 +209,12 @@ class EntryRepositoryImpl(
     }
 
     private fun com.zz.passwordmanager.data.db.EntryRow.toSummary() =
-        EntrySummary(id, title, username, url, categoryId)
+        EntrySummary(id, title, username, url, categoryId, favorite, EntryType.from(type))
 
     private fun EntryEntity.toDetail(tags: List<String>) = EntryDetail(
         id = id, title = title, username = username, url = url, notes = notes,
         categoryId = categoryId, tags = tags, totpEnabled = totpSecretCipher != null,
+        favorite = favorite, type = EntryType.from(type),
         createdAt = createdAt, updatedAt = updatedAt,
     )
 

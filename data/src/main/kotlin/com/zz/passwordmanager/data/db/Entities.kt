@@ -13,6 +13,9 @@ import androidx.room.PrimaryKey
  *
  * [titleLower]/[usernameLower]/[urlLower] 为归一化搜索列（T13，M4 大小写不敏感检索），
  * 由写入方维护；索引服务分类过滤与排序（包含式 LIKE 在 5000 条规模全表扫描可接受）。
+ *
+ * [favorite]/[type] 为 schema v3 新增（FR-5/FR-15），迁移自 v2 时取默认值
+ * （未收藏 + 账号），与需求 §6.3 的默认值一致。
  */
 @Entity(
     tableName = "entries",
@@ -21,6 +24,7 @@ import androidx.room.PrimaryKey
         Index("usernameLower"),
         Index("urlLower"),
         Index("categoryId"),
+        Index("favorite"),
     ],
 )
 data class EntryEntity(
@@ -35,6 +39,16 @@ data class EntryEntity(
     val notes: String?,
     val categoryId: String?,
     val totpSecretCipher: ByteArray?,
+    /**
+     * 收藏（FR-5，schema v3）。列表提供独立「收藏」筛选档。
+     * 纯展示性标记，不参与任何安全判定。
+     */
+    val favorite: Boolean = false,
+    /**
+     * 条目类型（FR-15，schema v3）。存枚举名（ACCOUNT/BANK_CARD/WIFI/DOCUMENT）。
+     * 决定列表副标题的渲染方式——银行卡/证件需掩码，见 `EntryType.subtitle`。
+     */
+    val type: String = "ACCOUNT",
     val createdAt: Long,
     val updatedAt: Long,
 )
