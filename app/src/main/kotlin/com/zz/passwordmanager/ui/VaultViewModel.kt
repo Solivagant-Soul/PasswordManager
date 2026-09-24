@@ -3,6 +3,8 @@ package com.zz.passwordmanager.ui
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.zz.passwordmanager.data.header.HeaderIntegrityException
+import com.zz.passwordmanager.data.vault.DestroyVault
 import com.zz.passwordmanager.data.vault.InitializeRequest
 import com.zz.passwordmanager.data.vault.InitializeVault
 import com.zz.passwordmanager.data.vault.UnlockVault
@@ -37,6 +39,8 @@ data class VaultUiState(
     val query: String = "",
     val revealed: Map<String, String> = emptyMap(),
     val errorMessage: String? = null,
+    /** Header 完整性校验失败（G-B）：数据不可用，UI 据此提供「清除重建」入口。 */
+    val vaultCorrupted: Boolean = false,
 )
 
 /**
@@ -47,6 +51,7 @@ data class VaultUiState(
 class VaultViewModel @Inject constructor(
     private val unlockVault: UnlockVault,
     private val initializeVault: InitializeVault,
+    private val destroyVault: DestroyVault,
     private val entryRepository: EntryRepository,
     private val clipboard: AndroidClipboardBridge,
     private val sessionManager: VaultSessionManager,
@@ -60,28 +65,53 @@ class VaultViewModel @Inject constructor(
 
     fun initialize(form: UnlockFormData) {
         viewModelScope.launch {
-            initializeVault(
-                InitializeRequest(
-                    masterPassword = form.masterPassword.toCharArray(),
-                    confirmMasterPassword = form.confirm.toCharArray(),
-                    securityQuestions = form.questions.map {
-                        InitializeRequest.SecurityQuestionInput(it.first, it.second.toCharArray())
-                    },
-                ),
-            ).fold(
-                onSuccess = { unlock(form.masterPassword) },
-                onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
-            )
+            try {
+                initializeVault(
+                    InitializeRequest(
+                        masterPassword = form.masterPassword.toCharArray(),
+                        confirmMasterPassword = form.confirm.toCharArray(),
+                        securityQuestions = form.questions.map {
+                            InitializeRequest.SecurityQuestionInput(it.first, it.second.toCharArray())
+                        },
+                    ),
+                ).fold(
+                    onSuccess = { unlock(form.masterPassword) },
+                    onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                )
+            } catch (e: HeaderIntegrityException) {
+                // G-B：既有库 Header 已损坏，不进初始化流程（宁严勿松），只提供清除入口
+                _state.update { it.copy(vaultCorrupted = true, errorMessage = null) }
+            }
         }
     }
 
     fun unlock(password: String) {
         viewModelScope.launch {
-            unlockVault(password.toCharArray()).fold(
-                onSuccess = { session ->
-                    sessionManager.begin(session)
-                    _state.update { it.copy(locked = false) }
-                    search(_state.value.query)
+            try {
+                unlockVault(password.toCharArray()).fold(
+                    onSuccess = { session ->
+                        sessionManager.begin(session)
+                        _state.update { it.copy(locked = false) }
+                        search(_state.value.query)
+                    },
+                    onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
+                )
+            } catch (e: HeaderIntegrityException) {
+                _state.update { it.copy(vaultCorrupted = true, errorMessage = null) }
+            }
+        }
+    }
+
+    /**
+     * 清除并重建密码库（G-B）：**破坏性**，调用方须已完成二次确认。
+     * 成功后回到「未初始化」态，用户可重新设置主密码。
+     */
+    fun destroyCorruptedVault() {
+        viewModelScope.launch {
+            destroyVault().fold(
+                onSuccess = {
+                    sessionManager.lock()
+                    _state.value = VaultUiState(initialized = false, locked = true)
                 },
                 onFailure = { e -> _state.update { it.copy(errorMessage = e.message) } },
             )

@@ -69,6 +69,17 @@ class VaultHeaderStore(
         }
     }
 
+    /**
+     * 删除 Header 文件（幂等，G-B「清除重建」入口的数据层原语）。
+     *
+     * **破坏性**：调用方必须已完成用户二次确认。仅删文件，不触碰 Body 数据库
+     * （那由 [com.zz.passwordmanager.data.vault.DestroyVault] 一并处理）。
+     */
+    fun delete() {
+        File(directory, "$FILE_NAME.tmp").delete() // 清理可能残留的临时文件
+        file.delete()
+    }
+
     /** 嵌套存储结构：data 为 Header JSON 文本，mac 覆盖 data 的原始字节。 */
     @kotlinx.serialization.Serializable
     private data class StoredHeader(val data: String, val mac: ByteArray)

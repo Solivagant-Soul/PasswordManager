@@ -17,17 +17,21 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assume
-import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * T09 运行时验收（需设备/模拟器）：
  * 1. wrap 无需认证即可加密；
- * 2. 未通过生物识别认证时 unwrap 必须被 Keystore 拒绝（安全语义）。
+ * 2. 未通过认证时不能取到解密 cipher（auth-per-use 安全语义，G-E）。
  *
- * 无已录入生物特征的设备（headless 模拟器）上跳过 auth 绑定用例——
- * Keystore 拒绝生成此类密钥；生产路径由 BiometricToggle 的 Gate 检查先行拦截。
+ * 需已录入 **Class-3 强认证**（G-D，与生产门禁一致）的设备才跑得起来——
+ * headless 模拟器无生物特征，Keystore 会拒绝生成 auth 绑定密钥。
+ * 生产路径由 `BiometricToggle` 的 Gate 检查先行拦截，不会让这类设备走到这里。
+ *
+ * 注意：`assumeStrongBiometric()` 只放在**依赖生物识别**的用例里，
+ * 不放 @Before——否则连不依赖生物识别的 Keystore 基建冒烟用例也会被一并跳过。
+ *
  * 执行：./gradlew :platform:connectedDebugAndroidTest
  */
 @RunWith(AndroidJUnit4::class)
@@ -37,35 +41,35 @@ class KeystoreDekVaultTest {
     private val vault = KeystoreDekVault()
     private val dek = ByteArray(32) { it.toByte() }
 
-    @Before
-    fun assumeBiometricEnrolled() {
+    /** 跳过条件：无 Class-3 强认证时，Keystore 拒绝创建 auth 绑定密钥。 */
+    private fun assumeStrongBiometric() {
         val result = BiometricManager.from(context)
-            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         Assume.assumeTrue(
-            "skip: no biometric enrolled on this device (gate would block users too)",
+            "skip: no strong biometric enrolled on this device (gate would block users too)",
             result == BiometricManager.BIOMETRIC_SUCCESS,
         )
     }
 
     @Test
     fun wrapProducesCiphertextWithIvPrefix() {
+        assumeStrongBiometric()
         val wrapped = vault.wrap(dek)
 
         assertTrue(wrapped.size > 32 + 12 + 16)
     }
 
     @Test
-    fun unwrapWithoutAuthenticationIsRejectedByKeystore() {
-        val wrapped = vault.wrap(dek)
-
-        // 刚生成/未在认证窗口内 → 必须要求用户认证
-        assertThrows(UserNotAuthenticatedException::class.java) { vault.unwrap(wrapped) }
+    fun creatingDecryptCipherWithoutAuthenticationIsRejected() {
+        assumeStrongBiometric()
+        // G-E auth-per-use：连 init 解密 cipher 都要求本次认证，密钥不在任何缓存窗口内
+        assertThrows(UserNotAuthenticatedException::class.java) { vault.createDecryptCipher() }
     }
 
     @Test
     fun wrapUsesRandomIv() {
-        // 认证窗口内的完整往返需 BiometricPrompt（UI 层触发）；
-        // 此处验证 wrap 的随机 IV 语义（同明文两次密文不同）。
+        assumeStrongBiometric()
+        // 完整往返需 BiometricPrompt（UI 层触发）；此处验证 wrap 的随机 IV 语义。
         val a = vault.wrap(dek)
         val b = vault.wrap(dek)
 

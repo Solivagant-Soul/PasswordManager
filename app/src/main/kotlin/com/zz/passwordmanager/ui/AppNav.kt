@@ -32,6 +32,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                     errorMessage = state.errorMessage,
                     onInitialize = viewModel::initialize,
                     onUnlock = viewModel::unlock,
+                    onDestroyVault = viewModel::destroyCorruptedVault,
                 )
             } else {
                 EntryListScreen(

@@ -10,6 +10,7 @@ import com.zz.passwordmanager.data.header.VaultHeaderStore
 import com.zz.passwordmanager.data.vault.AuthThrottle
 import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.ChangeSecurityQuestions
+import com.zz.passwordmanager.data.vault.DestroyVault
 import com.zz.passwordmanager.data.vault.InitializeVault
 import com.zz.passwordmanager.data.vault.ResetVault
 import com.zz.passwordmanager.data.vault.UnlockVault
@@ -100,6 +101,13 @@ object AppModule {
         store: VaultHeaderStore,
         throttle: AuthThrottle,
     ): ChangeSecurityQuestions = ChangeSecurityQuestions(keyManager, store, throttle)
+
+    /** G-B 清除重建入口（破坏性，UI 层负责二次确认）。 */
+    @Provides
+    fun provideDestroyVault(
+        store: VaultHeaderStore,
+        provider: VaultDatabaseProvider,
+    ): DestroyVault = DestroyVault(store, provider)
 
     @Provides
     @Singleton

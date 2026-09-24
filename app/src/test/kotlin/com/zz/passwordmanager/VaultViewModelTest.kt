@@ -1,5 +1,7 @@
 package com.zz.passwordmanager
 
+import com.zz.passwordmanager.data.header.HeaderIntegrityException
+import com.zz.passwordmanager.data.vault.DestroyVault
 import com.zz.passwordmanager.data.vault.InitializeVault
 import com.zz.passwordmanager.data.vault.Session
 import com.zz.passwordmanager.data.vault.UnlockVault
@@ -27,6 +29,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -38,6 +41,7 @@ class VaultViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val unlockVault: UnlockVault = mockk()
     private val initializeVault: InitializeVault = mockk()
+    private val destroyVault: DestroyVault = mockk(relaxed = true)
     private val repository: EntryRepository = mockk()
     private val clipboard: AndroidClipboardBridge = mockk(relaxed = true)
     private val sessionManager: VaultSessionManager = mockk(relaxed = true)
@@ -49,7 +53,10 @@ class VaultViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
-        viewModel = VaultViewModel(unlockVault, initializeVault, repository, clipboard, sessionManager, status)
+        viewModel = VaultViewModel(
+            unlockVault, initializeVault, destroyVault,
+            repository, clipboard, sessionManager, status,
+        )
     }
 
     @After
@@ -153,6 +160,35 @@ class VaultViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(viewModel.state.first().errorMessage != null)
+    }
+
+    // ---- G-B：Header 损坏 → 清除重建入口 ----
+
+    @Test
+    fun `header corruption during unlock surfaces corrupted state (G-B)`() = runTest(dispatcher) {
+        coEvery { unlockVault(any()) } throws HeaderIntegrityException("MAC mismatch")
+
+        viewModel.unlock("pw")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.state.first().vaultCorrupted)
+        // 损坏不是「密码错误」，不应显示为可重试的表单错误
+        assertNull(viewModel.state.first().errorMessage)
+    }
+
+    @Test
+    fun `destroyCorruptedVault returns to uninitialized state (G-B)`() = runTest(dispatcher) {
+        every { status.isInitialized() } returns false
+        coEvery { destroyVault() } returns Result.success(Unit)
+
+        viewModel.destroyCorruptedVault()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.state.first()
+        assertFalse(state.initialized)
+        assertTrue(state.locked)
+        assertFalse(state.vaultCorrupted)
+        verify { sessionManager.lock() }
     }
 
     private fun input() = com.zz.passwordmanager.domain.entries.EntryInput(

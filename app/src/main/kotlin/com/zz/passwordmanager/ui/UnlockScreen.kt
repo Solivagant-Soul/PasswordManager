@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +24,9 @@ import androidx.compose.ui.unit.dp
 /**
  * 初始化/解锁一体屏（FR-1/FR-2，M2 最小实现）：
  * 未初始化 → 主密码 + 确认 + 3 道密保；已初始化 → 主密码解锁。
+ *
+ * G-B 损坏态：Header 完整性校验失败时不显示表单（数据已不可用，输密码也无用），
+ * 改为提示 + 「重置密码库」入口，并经**两级确认**——破坏性操作不可一击生效。
  */
 @Composable
 fun UnlockScreen(
@@ -29,7 +34,13 @@ fun UnlockScreen(
     errorMessage: String?,
     onInitialize: (UnlockFormData) -> Unit,
     onUnlock: (String) -> Unit,
+    onDestroyVault: () -> Unit = {},
 ) {
+    if (state.vaultCorrupted) {
+        CorruptedVaultNotice(onDestroyVault = onDestroyVault)
+        return
+    }
+
     var master by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var q1 by remember { mutableStateOf("") }
@@ -92,5 +103,48 @@ fun UnlockScreen(
         ) {
             Text(if (state.initialized) "解锁" else "创建")
         }
+    }
+}
+
+/** G-B 损坏态：告知 + 两级确认的「重置密码库」（破坏性，全部数据永久丢失）。 */
+@Composable
+private fun CorruptedVaultNotice(onDestroyVault: () -> Unit) {
+    var stage by remember { mutableStateOf(0) } // 0=初始提示 1=最终确认
+
+    if (stage == 0) {
+        AlertDialog(
+            onDismissRequest = { stage = 0 },
+            title = { Text("密码库不可用") },
+            text = {
+                Text(
+                    "密码库数据完整性校验失败，通常是文件损坏或被意外修改。" +
+                        "数据文件可能仍在设备上，但无法解密，也无法用主密码解锁。" +
+                        "本应用没有云备份，无法自动恢复。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { stage = 1 }) { Text("重置密码库…") }
+            },
+            dismissButton = {
+                TextButton(onClick = { stage = 0 }) { Text("退出") }
+            },
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = { stage = 0 },
+            title = { Text("确认清除全部数据？") },
+            text = {
+                Text(
+                    "这将永久删除密码库中的全部条目，且无法恢复。" +
+                        "若你曾导出过加密备份，请先退出并从备份恢复。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onDestroyVault) { Text("确认删除全部数据") }
+            },
+            dismissButton = {
+                TextButton(onClick = { stage = 0 }) { Text("取消") }
+            },
+        )
     }
 }
