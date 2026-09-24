@@ -60,6 +60,8 @@ dependencies {
     implementation(libs.sqlcipher.android)
     // Header/备份的 JSON 序列化（D5：自定义加密 JSON）
     implementation(libs.kotlinx.serialization.json)
+    // T39 用户偏好（自动锁定档位、默认密码长度）
+    implementation(libs.androidx.datastore.preferences)
 
     ksp(libs.androidx.room.compiler)
 

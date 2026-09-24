@@ -23,6 +23,7 @@ import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.data.entries.CategoryRepository
 import com.zz.passwordmanager.domain.entries.Category
+import com.zz.passwordmanager.domain.preferences.UserPreferences
 import com.zz.passwordmanager.domain.security.SecurityScanner
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
@@ -104,6 +105,7 @@ class VaultViewModel @Inject constructor(
     private val entryRepository: EntryRepository,
     private val categoryRepository: CategoryRepository,
     private val securityScanner: SecurityScanner,
+    private val preferences: UserPreferences,
     private val clipboard: AndroidClipboardBridge,
     private val sessionManager: VaultSessionManager,
     private val status: VaultStatus,
@@ -113,6 +115,15 @@ class VaultViewModel @Inject constructor(
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
 
     init {
+        // 订阅偏好：自动锁定档位与生成器默认长度都「改了立刻生效」
+        viewModelScope.launch {
+            preferences.autoLockDuration.collect { autoLockDuration = it }
+        }
+        viewModelScope.launch {
+            preferences.defaultPasswordLength.collect { length ->
+                _state.update { it.copy(defaultPasswordLength = length) }
+            }
+        }
         refreshBiometricAvailability()
         // 锁定以 VaultSessionManager 为单一事实来源：任何路径的锁定（FR-8 自动锁定、
         // 密保找回失败后的锁定等）都要反映到 UI，并清空已解密的数据。
@@ -152,8 +163,30 @@ class VaultViewModel @Inject constructor(
     /** 切到后台：记录时刻。由 `MainActivity.onStop` 调用。 */
     fun onBackground() = sessionManager.onBackground(System.currentTimeMillis())
 
-    /** 回到前台：超期即锁定。档位写死 1 分钟（v1 决策：不做档位 UI 与偏好存储）。 */
-    fun onForeground() = sessionManager.onForeground(System.currentTimeMillis(), AUTO_LOCK_DURATION)
+    /**
+     * 回到前台：超期即锁定。档位取自用户偏好（T40/FR-16，默认 1 分钟）。
+     * 订阅式读取——设置里改了档位立即生效，不必重启。
+     */
+    fun onForeground() = sessionManager.onForeground(System.currentTimeMillis(), autoLockDuration)
+
+    // ---- 用户偏好（T39–T41） ----
+
+    /** 当前自动锁定档位。 */
+    var autoLockDuration: AutoLockDuration = AutoLockDuration.M1
+        private set
+
+    fun setAutoLockDuration(duration: AutoLockDuration) {
+        viewModelScope.launch {
+            preferences.setAutoLockDuration(duration)
+            autoLockDuration = duration
+        }
+    }
+
+    fun setDefaultPasswordLength(length: Int) {
+        viewModelScope.launch { preferences.setDefaultPasswordLength(length) }
+    }
+
+    // ---- 主动锁定 ----
 
     /** 主动锁定（S51「主动锁定立即生效」）：UI 清理交给 collector 统一做。 */
     fun lock() = sessionManager.lock()
@@ -609,8 +642,4 @@ class VaultViewModel @Inject constructor(
 
     private fun refresh(query: String = _state.value.query) = search(query)
 
-    private companion object {
-        /** FR-8 档位写死 1 分钟（2026-09-24 决策：不做档位 UI 与偏好存储，档位选择归二期）。 */
-        val AUTO_LOCK_DURATION = AutoLockDuration.M1
-    }
 }

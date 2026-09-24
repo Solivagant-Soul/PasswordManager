@@ -10,6 +10,7 @@ import com.zz.passwordmanager.data.entries.CategoryRepository
 import com.zz.passwordmanager.data.entries.EntryRepositoryImpl
 import com.zz.passwordmanager.data.header.KdfParams
 import com.zz.passwordmanager.data.header.VaultHeaderStore
+import com.zz.passwordmanager.data.prefs.DataStoreUserPreferences
 import com.zz.passwordmanager.data.security.DefaultSecurityScanner
 import com.zz.passwordmanager.data.vault.AuthThrottle
 import com.zz.passwordmanager.data.vault.ChangeMasterPassword
@@ -24,6 +25,7 @@ import com.zz.passwordmanager.data.vault.VaultStatus
 import com.zz.passwordmanager.domain.biometric.BiometricDekStore
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.entries.EntryRepository
+import com.zz.passwordmanager.domain.preferences.UserPreferences
 import com.zz.passwordmanager.domain.security.SecurityScanner
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
 import com.zz.passwordmanager.platform.biometric.AndroidBiometricGate
@@ -152,6 +154,11 @@ object AppModule {
         dekStore: BiometricDekStore,
         gate: BiometricGate,
     ): UnlockWithBiometric = UnlockWithBiometric(store, throttle, dekStore, gate)
+
+    @Provides
+    @Singleton
+    fun provideUserPreferences(@ApplicationContext context: Context): UserPreferences =
+        DataStoreUserPreferences(context)
 
     @Provides
     @Singleton

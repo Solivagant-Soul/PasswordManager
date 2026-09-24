@@ -17,6 +17,8 @@ import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultStatus
 import com.zz.passwordmanager.domain.biometric.BiometricGate
+import com.zz.passwordmanager.domain.autolock.AutoLockDuration
+import com.zz.passwordmanager.domain.preferences.UserPreferences
 import com.zz.passwordmanager.domain.security.SecurityScanner
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
@@ -31,6 +33,7 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -62,6 +65,7 @@ class VaultViewModelTest {
     private val repository: EntryRepository = mockk()
     private val categoryRepository: CategoryRepository = mockk(relaxed = true)
     private val securityScanner: SecurityScanner = mockk(relaxed = true)
+    private val preferences: UserPreferences = mockk(relaxed = true)
     private val clipboard: AndroidClipboardBridge = mockk(relaxed = true)
     // V1-1：VM 现在在 init 里 collect sessionManager.state。relaxed mock 的 state
     // 拿不到可 collect 的 StateFlow，会让 collector 崩——改用真实实例（纯 Kotlin，无 Android 依赖）。
@@ -76,12 +80,14 @@ class VaultViewModelTest {
 
     @Before
     fun setUp() {
+        every { preferences.autoLockDuration } returns flowOf(AutoLockDuration.M1)
+        every { preferences.defaultPasswordLength } returns flowOf(16)
         Dispatchers.setMain(dispatcher)
         viewModel = VaultViewModel(
             unlockVault, initializeVault, destroyVault, resetVault,
             changeMasterPassword, readSecurityQuestions,
             unlockWithBiometric, biometricToggle, gate,
-            repository, categoryRepository, securityScanner, clipboard, sessionManager, status,
+            repository, categoryRepository, securityScanner, preferences, clipboard, sessionManager, status,
         )
     }
 
@@ -225,7 +231,7 @@ class VaultViewModelTest {
             unlockVault, initializeVault, destroyVault, resetVault,
             changeMasterPassword, readSecurityQuestions,
             unlockWithBiometric, biometricToggle, gate,
-            repository, categoryRepository, securityScanner, clipboard, sessionManager, status,
+            repository, categoryRepository, securityScanner, preferences, clipboard, sessionManager, status,
         )
         stubSearch()
         coEvery { initializeVault(any()) } returns Result.success(Unit)
@@ -237,6 +243,37 @@ class VaultViewModelTest {
         // 设备走查发现：initialized 只在构造时读一次，首次创建后 UI 仍停在创建表单
         assertTrue(viewModel.state.first().initialized)
         assertFalse(viewModel.state.first().locked)
+    }
+
+    /**
+     * T40/FR-16：自动锁定档位来自用户偏好，不是写死的常量。
+     * 此前 `AUTO_LOCK_DURATION` 是 companion 里的硬编码值，设置项改了也不生效。
+     */
+    @Test
+    fun `auto lock honours the configured duration (T40)`() = runTest(dispatcher) {
+        every { preferences.autoLockDuration } returns flowOf(AutoLockDuration.S30)
+        viewModel = VaultViewModel(
+            unlockVault, initializeVault, destroyVault, resetVault,
+            changeMasterPassword, readSecurityQuestions,
+            unlockWithBiometric, biometricToggle, gate,
+            repository, categoryRepository, securityScanner, preferences,
+            clipboard, sessionManager, status,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AutoLockDuration.S30, viewModel.autoLockDuration)
+
+        unlockSuccessfully()
+        // 20 秒 < 30 秒档位 → 不应锁定（若仍按写死的 1 分钟，这也是「不锁」，故再测反向）
+        sessionManager.onBackground(System.currentTimeMillis() - 20_000L)
+        viewModel.onForeground()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertFalse("20 秒未达 30 秒档位，不应锁定", viewModel.state.first().locked)
+
+        // 40 秒 > 30 秒档位 → 应锁定（写死 1 分钟时不会锁）
+        sessionManager.onBackground(System.currentTimeMillis() - 40_000L)
+        viewModel.onForeground()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue("40 秒超过 30 秒档位，应锁定", viewModel.state.first().locked)
     }
 
     // ---- V1-2 FR-12 密保找回 / V1-3 P-07 修改主密码 ----

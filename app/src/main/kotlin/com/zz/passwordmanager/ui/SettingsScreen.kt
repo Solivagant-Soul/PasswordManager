@@ -1,5 +1,6 @@
 package com.zz.passwordmanager.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -23,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 
 /**
  * 设置屏（v1 最小集）：P-07 修改主密码 + 主动锁定。
@@ -34,7 +37,13 @@ fun SettingsScreen(
     successMessage: String?,
     biometricEnabled: Boolean,
     categories: List<com.zz.passwordmanager.domain.entries.Category>,
+    autoLockDuration: AutoLockDuration,
+    defaultPasswordLength: Int,
+    appVersionName: String,
     onRunBiometricDiagnostics: () -> String,
+    onSetAutoLockDuration: (AutoLockDuration) -> Unit,
+    onSetDefaultPasswordLength: (Int) -> Unit,
+    onOpenAbout: () -> Unit,
     onChangeMasterPassword: (current: String, new: String, confirm: String) -> Unit,
     onBiometricToggle: (enable: Boolean, masterPassword: String) -> Unit,
     onUpsertCategory: (String?, String) -> Unit,
@@ -116,6 +125,41 @@ fun SettingsScreen(
             onClick = { diagnosticReport = onRunBiometricDiagnostics() },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("生物识别诊断") }
+
+        // ---- 自动锁定档位（T40/FR-16）----
+        Spacer(Modifier.height(24.dp))
+        Text("自动锁定", style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            AutoLockDuration.entries.forEach { duration ->
+                FilterChip(
+                    selected = autoLockDuration == duration,
+                    onClick = { onSetAutoLockDuration(duration) },
+                    label = { Text(duration.label) },
+                )
+            }
+        }
+        Text(
+            "切到后台超过该时长后自动锁定",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        // ---- 默认密码长度（T41/FR-16）----
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("默认密码长度", modifier = Modifier.weight(1f))
+            TextButton(onClick = { onSetDefaultPasswordLength(defaultPasswordLength - 4) }) { Text("−") }
+            Text("$defaultPasswordLength", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = { onSetDefaultPasswordLength(defaultPasswordLength + 4) }) { Text("＋") }
+        }
+
+        // ---- 关于（T46）----
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("关于", modifier = Modifier.weight(1f))
+            TextButton(onClick = onOpenAbout) { Text("v$appVersionName ›") }
+        }
 
         // ---- 分类管理（T34/T35）----
         Spacer(Modifier.height(24.dp))
@@ -208,3 +252,11 @@ fun SettingsScreen(
         )
     }
 }
+
+private val AutoLockDuration.label: String
+    get() = when (this) {
+        AutoLockDuration.IMMEDIATE -> "立即"
+        AutoLockDuration.S30 -> "30 秒"
+        AutoLockDuration.M1 -> "1 分钟"
+        AutoLockDuration.M5 -> "5 分钟"
+    }

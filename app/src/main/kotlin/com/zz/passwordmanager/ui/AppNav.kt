@@ -35,6 +35,7 @@ sealed interface Screen {
     data object Settings : Screen
     data object Generator : Screen
     data object Security : Screen
+    data object About : Screen
 }
 
 /** 底部四个一级页（设计稿 v0.8）。切 Tab 不清各自栈，切回时恢复原位置。 */
@@ -49,6 +50,11 @@ enum class AppTab(val label: String, val icon: String) {
 fun AppNav(viewModel: VaultViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     val appContext = LocalContext.current
+    val versionName = remember(appContext) {
+        runCatching {
+            appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName
+        }.getOrNull() ?: "1.0.0"
+    }
 
     // 每个 Tab 各自持有回退栈
     val stacks = remember {
@@ -139,11 +145,22 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 },
             )
 
+            Screen.About -> AboutScreen(
+                versionName = versionName,
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
             Screen.Settings -> SettingsScreen(
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
                 biometricEnabled = state.biometricEnabled,
                 categories = state.categories,
+                autoLockDuration = viewModel.autoLockDuration,
+                defaultPasswordLength = state.defaultPasswordLength,
+                appVersionName = versionName,
+                onSetAutoLockDuration = viewModel::setAutoLockDuration,
+                onSetDefaultPasswordLength = viewModel::setDefaultPasswordLength,
+                onOpenAbout = { backStack.add(Screen.About) },
                 onBiometricToggle = biometricToggleAction(viewModel),
                 onUpsertCategory = viewModel::upsertCategory,
                 onDeleteCategory = viewModel::deleteCategory,
