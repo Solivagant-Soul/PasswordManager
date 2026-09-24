@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 需求/设计阶段已完成，代码阶段进行中：Android 工程位于仓库根目录，`DesignDocument/` 为设计文档目录。
 
 - 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑与批次划分见 §9）。
-- **当前进度：M0–M2 + v1 成品冲刺已完成（T01–T19）**。v1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
+- **当前进度：M0–M2 + v1 成品冲刺已完成（T01–T19，代码已交付）**。v1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
+- **下一批：V2 功能增强（T32–T47，尚未开工）**——基于设计稿截图的新增需求：分类/收藏/条目类型、安全中心、生成器强度、四标签导航、设置项。技术设计见 `技术方案.md` §10，处置依据见 `设计文档/功能点提取与处置清单.md`。
 - **交付形态：个人自用 APK**（不上应用商店，故无隐私政策与商店合规）。自签证书已生成于**仓库外** `F:/Python_file/ai_coding/tools/keystore/`（`vault-release.jks` + `credentials.properties`），出包命令见下方「构建与验证命令」。证书口令**不入库、不外传**；丢了它就无法再给本 App 出可覆盖升级的包，只能卸载重装。
 - 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
 - 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
@@ -52,6 +53,7 @@ set -a; . <(grep -v '^#' "F:/Python_file/ai_coding/tools/keystore/credentials.pr
 - `DesignDocument/技术方案评审意见.md` —— 技术方案评审记录（含 B1/S1/S2/S3 等问题的处置）。
 - `DesignDocument/M1安全评审报告.md` —— M1 安全评审门禁（S-1 已修复；G-A~G-G 遗留项）。
 - `DesignDocument/遗留项与决策记录.md` —— 各里程碑遗留问题的处置状态与归属里程碑（含推迟理由）。
+- `DesignDocument/功能点提取与处置清单.md` —— 设计稿截图的功能点提取、新增/冲突分类与 C1–C7 收口结论。
 
 文档结构要点（便于快速定位）：
 
@@ -73,7 +75,7 @@ set -a; . <(grep -v '^#' "F:/Python_file/ai_coding/tools/keystore/credentials.pr
 - **认证**：主密码为根凭证 + 生物识别（指纹/面容）快速解锁；连续输错主密码 5 次锁定 1 分钟。
 - **找回**：忘记主密码凭 3 道密保问题全部答对 → **重置**主密码（原主密码本身不可取回）。
 - **功能范围**：条目增删改查、密码生成器、分类/标签/搜索、加密导入导出/备份。
-- **交付批次（2026-09-24 用户拍板）**：**TOTP 动态码、自动填充、CSV 导入、分类、标签、加密备份导出/导入、root 检测、无障碍与文案外置、商店发布准备，全部属二期**。
+- **交付批次（2026-09-24 用户拍板，v0.8 调整）**：**TOTP 动态码、自动填充、CSV 导入、加密备份导出/导入、root 检测、无障碍与文案外置、商店发布准备，属二期**；**分类与标签管理已拉回一期**（设计稿的 chips 筛选依赖分类，标签存储链路 v1 已就绪）。
   需求与 Gherkin 场景均保留（`@phase-2` 标签），一期只交付其相关基础设施；
   预留设计与约束见 `技术方案.md` §9.2——**改数据模型或备份容器前先读该节**。
 - **关键边界**：条目上限 5000、密码必填且非空、主密码 ≥8 位且至少两类字符、剪贴板 30 秒自动清理、后台 1 分钟自动锁定、删除无回收站。
