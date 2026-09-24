@@ -10,15 +10,28 @@ import androidx.room.PrimaryKey
  *
  * [passwordCipher]/[totpSecretCipher] 为 DEK 字段级加密后的密文（D8 纵深防御）：
  * 整库已被 SQLCipher 加密，敏感字段再加密一层。
- * 归一化搜索列与索引由 T13 引入（届时演练 Room 迁移）。
+ *
+ * [titleLower]/[usernameLower]/[urlLower] 为归一化搜索列（T13，M4 大小写不敏感检索），
+ * 由写入方维护；索引服务分类过滤与排序（包含式 LIKE 在 5000 条规模全表扫描可接受）。
  */
-@Entity(tableName = "entries")
+@Entity(
+    tableName = "entries",
+    indices = [
+        Index("titleLower"),
+        Index("usernameLower"),
+        Index("urlLower"),
+        Index("categoryId"),
+    ],
+)
 data class EntryEntity(
     @PrimaryKey val id: String,
     val title: String,
+    val titleLower: String,
     val username: String,
+    val usernameLower: String,
     val passwordCipher: ByteArray,
     val url: String?,
+    val urlLower: String?,
     val notes: String?,
     val categoryId: String?,
     val totpSecretCipher: ByteArray?,

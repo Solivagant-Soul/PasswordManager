@@ -23,6 +23,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    sourceSets {
+        // MigrationTestHelper 从 assets 读历史 schema（T13）：把导出的 schemas 挂进 androidTest 资产
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     kotlinOptions {
         jvmTarget = "17"
     }
@@ -67,5 +72,7 @@ dependencies {
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // T13：迁移测试 Helper（androidTest，模拟器真库）
+    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.kotlinx.coroutines.core)
 }
