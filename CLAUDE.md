@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑与批次划分见 §9）。
 - **当前进度：M0–M2 + v1 成品冲刺已完成（T01–T19）**。v1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
-- **交付形态：个人自用 APK**（不上应用商店，故无隐私政策与商店合规）。出包：`./gradlew :app:assembleRelease`；配置 `VAULT_KEYSTORE` 等 Gradle 属性后用自签证书，否则回落到 debug 签名（APK 仍可安装但可调试）。
+- **交付形态：个人自用 APK**（不上应用商店，故无隐私政策与商店合规）。自签证书已生成于**仓库外** `F:/Python_file/ai_coding/tools/keystore/`（`vault-release.jks` + `credentials.properties`），出包命令见下方「构建与验证命令」。证书口令**不入库、不外传**；丢了它就无法再给本 App 出可覆盖升级的包，只能卸载重装。
 - 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
 - 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
 
@@ -22,12 +22,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 仪器测试（需模拟器/真机；SQLCipher 为 native 库，JVM 单测无法覆盖）
 ./gradlew :data:connectedDebugAndroidTest :platform:connectedDebugAndroidTest
 
-# 出可安装 APK
+# 出可安装 APK（自签证书在仓库外，需先注入凭据）
+set -a; . <(grep -v '^#' "F:/Python_file/ai_coding/tools/keystore/credentials.properties"); set +a
 ./gradlew :app:assembleRelease
+# 验证签名与 debuggable 标志
+"F:/Python_file/ai_coding/tools/android-sdk/build-tools/35.0.0/apksigner.bat" verify --print-certs app/build/outputs/apk/release/app-release.apk
+"F:/Python_file/ai_coding/tools/android-sdk/build-tools/35.0.0/aapt2.exe" dump badging app/build/outputs/apk/release/app-release.apk | grep -i debuggable  # 无输出 = 不可调试
 ```
 
 ## 工程约定
 
+- **签名材料不入库**：`*.jks` / `*.keystore` / `credentials.properties` 已在 `.gitignore`，
+  且实际存放于仓库外；改签名配置时不要把它们拷进仓库。
 - **源根只用 `src/{main,test,androidTest}/kotlin`**：历史上 `java/` 与 `kotlin/` 双源根并存，导致同包同名类被编译两次、KSP 重复生成 Hilt 注入器（`:app:kspDebugKotlin` FileAlreadyExistsException）。
 - **androidTest 禁用反引号方法名**：`minSdk 26` 对应 DEX 038，不接受 SimpleName 中的空格，方法名必须 camelCase。JVM 单测（`src/test`）不受此限。
 - **数据层自持调度器**：Argon2 派生走 `Dispatchers.Default`、SQLCipher 与 Room 走 `Dispatchers.IO`（均在用例/仓库内部 `withContext`），调用方（ViewModel）不应选择调度器。

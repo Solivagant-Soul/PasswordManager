@@ -11,3 +11,9 @@ build/
 /local.properties
 .idea/
 .DS_Store
+
+# 签名材料：keystore / 凭据一律不入库（当前实际存放在仓库外的
+# F:/Python_file/ai_coding/tools/keystore/，此处再加一道保险）
+*.jks
+*.keystore
+credentials.properties
