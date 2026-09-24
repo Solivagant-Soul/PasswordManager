@@ -48,8 +48,10 @@ private fun authMessage(error: AuthError): String = when (error) {
     AuthError.BiometricCancelled -> "已取消生物识别，请用主密码解锁"
     AuthError.BiometricLockedOut -> "生物识别已锁定，请用主密码解锁"
     AuthError.BiometricKeyInvalidated -> "生物识别已失效，请用主密码解锁后在设置中重新开启"
+    is AuthError.BiometricSetupFailed -> "开启生物识别失败：${error.reason}"
+    // 硬件本身可用却走到这里 = 状态不一致，如实说明而不是谎称「未录入」
     is AuthError.BiometricUnavailable -> when (error.availability) {
-        BiometricGate.Availability.AVAILABLE -> "生物识别不可用，请用主密码解锁"
+        BiometricGate.Availability.AVAILABLE -> "生物识别状态异常，请用主密码解锁"
         BiometricGate.Availability.NO_HARDWARE -> "本机没有指纹/面容硬件，请用主密码解锁"
         BiometricGate.Availability.NOT_ENROLLED -> "尚未录入指纹/面容，请用主密码解锁"
     }

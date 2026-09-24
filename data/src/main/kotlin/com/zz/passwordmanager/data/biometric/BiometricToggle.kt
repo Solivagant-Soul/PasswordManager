@@ -58,10 +58,15 @@ class BiometricToggle(
             )
         }
 
-        // Keystore 拒绝建密钥等失败归为 BiometricUnavailable：UI 已有对应文案
+        // 包裹失败与「硬件不可用/未录入」是不同的故障，必须分开报——
+        // v0.10 前一律映射成 BiometricUnavailable，把写入失败说成了设备不支持
         val wrapped = if (enable) {
-            runCatching { dekStore.wrap(dek) }.getOrElse {
-                return Result.failure(AuthException(AuthError.BiometricUnavailable(gate.availability())))
+            runCatching { dekStore.wrap(dek) }.getOrElse { e ->
+                return Result.failure(
+                    AuthException(
+                        AuthError.BiometricSetupFailed("${e.javaClass.simpleName}: ${e.message}"),
+                    ),
+                )
             }
         } else {
             null

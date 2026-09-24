@@ -39,6 +39,15 @@ sealed interface AuthError {
     data object BiometricLockedOut : AuthError
     /** 快捷密钥失效（新录入指纹）或密文校验失败 → 已自愈关闭开关，提示重开。 */
     data object BiometricKeyInvalidated : AuthError
+
+    /**
+     * 开启快捷解锁时写入 Keystore 失败（与「硬件不可用/未录入」是**不同**的故障）。
+     *
+     * v0.10 实机踩坑：包裹失败曾被兜底映射成 `BiometricUnavailable`，而该错误的文案
+     * 指向「未录入/无硬件」，把「开启流程写密钥失败」误导成了「设备不支持」，
+     * 排查绕了远路。两者必须分开。
+     */
+    data class BiometricSetupFailed(val reason: String) : AuthError
 }
 
 class AuthException(val error: AuthError) : Exception(error.toString())

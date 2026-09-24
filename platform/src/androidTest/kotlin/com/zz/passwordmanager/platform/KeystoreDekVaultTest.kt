@@ -105,4 +105,36 @@ class KeystoreDekVaultTest {
         decrypt.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, sealed.copyOf(12)))
         assertArrayEquals(dek, decrypt.doFinal(sealed.copyOfRange(12, sealed.size)))
     }
+
+    /**
+     * 回归测试（v0.10 实机踩坑）：包裹 DEK **不应要求用户认证**。
+     *
+     * 曾经的 bug：包裹与解包共用一把 `setUserAuthenticationRequired(true)` 的密钥，
+     * 而开启快捷解锁时用户刚验的是主密码、并非生物识别——Android 对 auth-required
+     * 密钥的**加密同样要求认证**，于是 `doFinal` 抛 UserNotAuthenticatedException，
+     * 表现为「生物识别无法开启」。
+     *
+     * 修复后包裹走独立的、不需认证的密钥，**本用例无需录入生物特征即可运行**，
+     * 因此能在 CI/模拟器上守住这条回归（原实现下本例会失败）。
+     */
+    @Test
+    fun wrapDoesNotRequireUserAuthentication() {
+        val wrapped = vault.wrap(dek)
+
+        assertTrue(wrapped.size > dek.size)
+        // 能在无任何认证的情况下完成加密，即证明包裹密钥不要求认证
+        assertTrue(KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            .getKey("vault-biometric-dek-wrap", null) is SecretKey)
+    }
+
+    /** 开启后必须清掉**两把**密钥：包裹与解包，漏一把即留下无主凭证。 */
+    @Test
+    fun deleteKeyRemovesBothAliases() {
+        vault.wrap(dek)
+        vault.deleteKey()
+
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        assertTrue(!store.containsAlias("vault-biometric-dek"))
+        assertTrue(!store.containsAlias("vault-biometric-dek-wrap"))
+    }
 }

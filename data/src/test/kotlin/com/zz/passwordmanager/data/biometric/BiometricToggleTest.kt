@@ -142,14 +142,22 @@ class BiometricToggleTest {
     }
 
     @Test
-    fun `failing keystore wrap surfaces as unavailable rather than half enabling`() = runTest {
+    fun `failing keystore wrap surfaces setup failure rather than half enabling or blaming hardware`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
         every { dekStore.wrap(any()) } throws IllegalStateException("keystore refused")
 
         val result = toggle()(enable = true, masterPassword = password)
 
-        assertTrue((result.exceptionOrNull() as AuthException).error is AuthError.BiometricUnavailable)
+        // v0.10：包裹失败必须与「硬件不可用/未录入」区分开——
+        // 旧实现一律报 BiometricUnavailable，把「写密钥失败」说成了「设备不支持」，
+        // 实机排查因此绕了远路
+        val error = (result.exceptionOrNull() as AuthException).error
+        assertTrue(error is AuthError.BiometricSetupFailed)
+        assertTrue(
+            "错误应带出真实原因",
+            (error as AuthError.BiometricSetupFailed).reason.contains("keystore refused"),
+        )
         // 失败时不得留下「开关开了但没密文」的中间态
         assertTrue(headerStore.read()!!.biometricEnabled.not())
     }
