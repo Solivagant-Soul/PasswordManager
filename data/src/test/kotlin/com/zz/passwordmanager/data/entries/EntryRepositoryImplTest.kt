@@ -129,6 +129,36 @@ class EntryRepositoryImplTest {
         assertTrue(issues.any { it.field == "tags" })
     }
 
+    // ---- TOTP 预留（需求 §1.4 二期；一期只保证数据通路，见技术方案 §9.2） ----
+
+    @Test
+    fun `create stores totp secret encrypted in the reserved column`() = runTest {
+        val secret = "JBSWY3DPEHPK3PXP"
+
+        repository.create(input().copy(totpSecret = secret.toCharArray()))
+
+        val captured = slot<com.zz.passwordmanager.data.db.EntryEntity>()
+        coVerify(exactly = 1) { entryDao.upsert(capture(captured)) }
+        val entity = captured.captured
+        // 落库为密文，可回解（与 password 同等对待，NFR-S7）
+        assertEquals(secret, keyManager.decrypt(entity.totpSecretCipher!!, dek).decodeToString())
+    }
+
+    @Test
+    fun `update without totp secret preserves the stored one`() = runTest {
+        val existingTotp = keyManager.encrypt("JBSWY3DPEHPK3PXP".encodeToByteArray(), dek)
+        coEvery { entryDao.getById("e1") } returns entityWith(ByteArray(8), totp = existingTotp)
+
+        repository.update("e1", input()) // 不带 totpSecret
+
+        val captured = slot<com.zz.passwordmanager.data.db.EntryEntity>()
+        coVerify(exactly = 1) { entryDao.upsert(capture(captured)) }
+        assertTrue(
+            "未提供 TOTP 密钥时应保留原有密文",
+            captured.captured.totpSecretCipher!!.contentEquals(existingTotp),
+        )
+    }
+
     // ---- reveal ----
 
     @Test
@@ -195,10 +225,10 @@ class EntryRepositoryImplTest {
         }
     }
 
-    private fun entityWith(cipher: ByteArray) = com.zz.passwordmanager.data.db.EntryEntity(
+    private fun entityWith(cipher: ByteArray, totp: ByteArray? = null) = com.zz.passwordmanager.data.db.EntryEntity(
         id = "e1", title = "t", titleLower = "t", username = "u", usernameLower = "u",
         passwordCipher = cipher, url = null, urlLower = null, notes = null,
-        categoryId = null, totpSecretCipher = null, createdAt = 1L, updatedAt = 1L,
+        categoryId = null, totpSecretCipher = totp, createdAt = 1L, updatedAt = 1L,
     )
 
     private companion object {

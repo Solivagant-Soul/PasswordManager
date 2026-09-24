@@ -88,7 +88,10 @@ class EntryRepositoryImpl(
                 urlLower = input.url?.trim()?.lowercase(),
                 notes = input.notes,
                 categoryId = input.categoryId,
-                totpSecretCipher = null, // TOTP 录入属 T21
+                // TOTP 密钥与密码同等加密（NFR-S7）；一期 UI 不传，取值恒 null
+                totpSecretCipher = input.totpSecret?.let {
+                    keyManager.encrypt(it.concatToString().encodeToByteArray(), dek)
+                },
                 createdAt = now,
                 updatedAt = now,
             ),
@@ -128,6 +131,10 @@ class EntryRepositoryImpl(
                 urlLower = input.url?.trim()?.lowercase(),
                 notes = input.notes,
                 categoryId = input.categoryId,
+                // null = 未提供，保留库中原有 TOTP 密钥（清除语义属二期 T21）
+                totpSecretCipher = input.totpSecret
+                    ?.let { keyManager.encrypt(it.concatToString().encodeToByteArray(), dek) }
+                    ?: existing.totpSecretCipher,
                 updatedAt = System.currentTimeMillis(),
             ),
         )

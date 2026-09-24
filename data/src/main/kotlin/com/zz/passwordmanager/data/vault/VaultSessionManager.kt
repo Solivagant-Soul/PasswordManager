@@ -12,6 +12,15 @@ import kotlinx.coroutines.flow.asStateFlow
  * - [lock]：清 DEK → Locked（后台/手动/超时统一入口）；
  * - [onBackground]/[onForeground]：自动锁定触发（FR-8，AutoLockPolicy 各档，T08）；
  * - [requireUnlocked]：所有内容访问的门禁（P-01/P-06，BR-7）。
+ *
+ * **⚠️ 未来自动填充的会话边界约束（自动填充属二期，见需求 §1.4 / 技术方案 §9.2）**
+ *
+ * 本类的会话是**面向 UI 的单条长会话**：由 Activity 侧解锁，直到自动锁定/手动锁定才结束。
+ * 二期的 `AutofillService` 没有 Activity、拿不到 `VaultViewModel`，**不得复用这条会话**——
+ * 那会让系统填充服务成为「绕过自动锁定」的旁路（FR-8 形同虚设）。
+ *
+ * 二期实现自动填充时必须另行提供**自持、短生命周期、用后即锁**的会话入口，
+ * 并与本 UI 会话的状态互不干扰。此约束在此先行记录，避免二期才发现需要重构。
  */
 class VaultSessionManager {
 

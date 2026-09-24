@@ -25,7 +25,14 @@ data class EntryDetail(
     val updatedAt: Long,
 )
 
-/** 新建/编辑输入：密码 CharArray（方案 §5 敏感参数原则）。 */
+/**
+ * 新建/编辑输入：密码 CharArray（方案 §5 敏感参数原则）。
+ *
+ * [totpSecret] 为 TOTP 密钥，**一期不暴露给 UI**（动态码属二期，见需求 §1.4 / 技术方案 §9.2），
+ * 但数据通路一期已就绪：非空即经 DEK 加密入库，二期只需接 TOTP 计算与 UI，不动 schema 与迁移。
+ * 传入 null 表示「不设置」；[EntryRepository.update] 在 null 时保留库中原有密钥
+ * （清除密钥属二期 T21 的编辑态语义）。
+ */
 data class EntryInput(
     val title: String,
     val username: String,
@@ -34,6 +41,7 @@ data class EntryInput(
     val notes: String?,
     val categoryId: String?,
     val tags: List<String>,
+    val totpSecret: CharArray? = null,
 )
 
 interface EntryRepository {
