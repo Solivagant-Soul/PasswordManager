@@ -23,6 +23,7 @@ import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.data.entries.CategoryRepository
 import com.zz.passwordmanager.domain.entries.Category
+import com.zz.passwordmanager.domain.security.SecurityScanner
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryRepository
@@ -63,6 +64,12 @@ data class VaultUiState(
     val recovering: Boolean = false,
     /** 密保问题文本（仅问题，答案从不落盘 D4）。 */
     val recoveryQuestions: List<String> = emptyList(),
+    /** 安全扫描中。 */
+    val scanning: Boolean = false,
+    /** 最近一次扫描结果（FR-13）。null = 尚未扫描。 */
+    val securityReport: com.zz.passwordmanager.domain.security.SecurityReport? = null,
+    /** 默认密码长度（T41/FR-16）：生成器初值，设置项可改。 */
+    val defaultPasswordLength: Int = 16,
     /** 全部分类（列表 chips 用）。 */
     val categories: List<Category> = emptyList(),
     /** 当前分类筛选（null = 全部）。 */
@@ -96,6 +103,7 @@ class VaultViewModel @Inject constructor(
     private val gate: BiometricGate,
     private val entryRepository: EntryRepository,
     private val categoryRepository: CategoryRepository,
+    private val securityScanner: SecurityScanner,
     private val clipboard: AndroidClipboardBridge,
     private val sessionManager: VaultSessionManager,
     private val status: VaultStatus,
@@ -486,6 +494,22 @@ class VaultViewModel @Inject constructor(
         }
     }
 
+    // ---- 安全中心（T42/T43） ----
+
+    /**
+     * 执行本地安全扫描（FR-13）。全程离线；解密出的明文在扫描函数内即清零，
+     * 结果只带条目 id（见 `DefaultSecurityScanner` 的明文纪律）。
+     */
+    fun startScan() {
+        if (_state.value.scanning) return
+        _state.update { it.copy(scanning = true, errorMessage = null) }
+        viewModelScope.launch {
+            runCatching { securityScanner.scan() }
+                .onSuccess { report -> _state.update { it.copy(scanning = false, securityReport = report) } }
+                .onFailure { e -> _state.update { it.copy(scanning = false, errorMessage = userMessage(e)) } }
+        }
+    }
+
     // ---- 分类管理（T34） ----
 
     fun upsertCategory(id: String?, name: String) {
@@ -535,6 +559,11 @@ class VaultViewModel @Inject constructor(
 
     fun hide(id: String) {
         _state.update { it.copy(revealed = it.revealed - id) } // 离开详情页/手动隐藏（明文不残留）
+    }
+
+    /** 复制生成器产出的密码（走同一套剪贴板 30 秒清理，FR-4「可复制」）。 */
+    fun copyGeneratedPassword(password: String) {
+        clipboard.copySensitive(password)
     }
 
     fun copyPassword(id: String) {
