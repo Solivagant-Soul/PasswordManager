@@ -23,26 +23,34 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
     val backStack: SnapshotStateList<Screen> = remember { mutableStateListOf(Screen.List) }
     val top = backStack.last()
 
+    // FR-8/BR-7：锁定门禁必须在**所有屏之上**。若只在 List 分支判断，
+    // 用户在详情/编辑页切后台超时后回来，仍会停在该页（且数据已清空 → 空白页、退出路径诡异）。
+    // 锁定时连回退栈一并清空，避免解锁后落回旧页面。
+    LaunchedEffect(state.locked) {
+        if (state.locked && backStack.size > 1) backStack.removeAll { it != Screen.List }
+    }
+
+    if (state.locked || !state.initialized) {
+        UnlockScreen(
+            state = state,
+            errorMessage = state.errorMessage,
+            onInitialize = viewModel::initialize,
+            onUnlock = viewModel::unlock,
+            onDestroyVault = viewModel::destroyCorruptedVault,
+        )
+        return
+    }
+
     // 详情数据：按栈顶 id 从仓库取（M2 简化：由 VM 的列表缓存 + get 组合）
     when (top) {
         Screen.List -> {
-            if (state.locked || !state.initialized) {
-                UnlockScreen(
-                    state = state,
-                    errorMessage = state.errorMessage,
-                    onInitialize = viewModel::initialize,
-                    onUnlock = viewModel::unlock,
-                    onDestroyVault = viewModel::destroyCorruptedVault,
-                )
-            } else {
-                EntryListScreen(
-                    state = state,
-                    errorMessage = state.errorMessage,
-                    onQueryChange = viewModel::search,
-                    onOpen = { backStack.add(Screen.Detail(it)) },
-                    onCreate = { backStack.add(Screen.Edit(null)) },
-                )
-            }
+            EntryListScreen(
+                state = state,
+                errorMessage = state.errorMessage,
+                onQueryChange = viewModel::search,
+                onOpen = { backStack.add(Screen.Detail(it)) },
+                onCreate = { backStack.add(Screen.Edit(null)) },
+            )
         }
 
         is Screen.Detail -> {

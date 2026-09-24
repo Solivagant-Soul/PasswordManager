@@ -6,6 +6,7 @@ import com.zz.passwordmanager.data.vault.InitializeVault
 import com.zz.passwordmanager.data.vault.Session
 import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
+import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultStatus
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
@@ -44,7 +45,9 @@ class VaultViewModelTest {
     private val destroyVault: DestroyVault = mockk(relaxed = true)
     private val repository: EntryRepository = mockk()
     private val clipboard: AndroidClipboardBridge = mockk(relaxed = true)
-    private val sessionManager: VaultSessionManager = mockk(relaxed = true)
+    // V1-1：VM 现在在 init 里 collect sessionManager.state。relaxed mock 的 state
+    // 拿不到可 collect 的 StateFlow，会让 collector 崩——改用真实实例（纯 Kotlin，无 Android 依赖）。
+    private val sessionManager = VaultSessionManager()
     private val status: VaultStatus = mockk { every { isInitialized() } returns true }
 
 
@@ -80,7 +83,7 @@ class VaultViewModelTest {
 
         assertArrayEquals("pw".toCharArray(), password.captured)
         assertFalse(viewModel.state.first().locked)
-        verify { sessionManager.begin(any()) }
+        assertTrue(sessionManager.state.value is VaultState.Unlocked)
     }
 
     @Test
@@ -188,7 +191,62 @@ class VaultViewModelTest {
         assertFalse(state.initialized)
         assertTrue(state.locked)
         assertFalse(state.vaultCorrupted)
-        verify { sessionManager.lock() }
+        assertTrue(sessionManager.state.value is VaultState.Locked)
+    }
+
+    // ---- V1-1 FR-8 自动锁定 ----
+
+    @Test
+    fun `background longer than one minute locks on foreground`() = runTest(dispatcher) {
+        unlockSuccessfully()
+        // 直接推进时间：VM 读的是 System.currentTimeMillis，故测真实时长成本高。
+        // 这里改为直接验证 AutoLockPolicy 与 sessionManager 的组合语义——
+        // sessionManager 用真实实例，构造一个 61 秒前的后台时刻。
+        sessionManager.onBackground(System.currentTimeMillis() - 61_000L)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onForeground()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue("超期应锁定", viewModel.state.first().locked)
+    }
+
+    @Test
+    fun `locking clears decrypted entries and revealed plaintext`() = runTest(dispatcher) {
+        unlockSuccessfully()
+        coEvery { repository.revealPassword("e1") } returns Result.success("secret".toCharArray())
+        viewModel.reveal("e1")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.state.first().revealed.containsKey("e1"))
+
+        sessionManager.lock() // 模拟自动锁定 / 主动锁定
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.state.first()
+        assertTrue(state.locked)
+        assertTrue("明文不得残留", state.revealed.isEmpty())
+        assertTrue("锁定后不得保留已解密标题", state.entries.isEmpty())
+    }
+
+    @Test
+    fun `locking preserves the search query as user intent`() = runTest(dispatcher) {
+        unlockSuccessfully()
+        viewModel.search("mail")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        sessionManager.lock()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("mail", viewModel.state.first().query)
+    }
+
+    private suspend fun unlockSuccessfully() {
+        stubSearch()
+        // Session 的构造器是 internal（:data 边界，:app 不可见）→ 用 mock；
+        // relaxed 是因为 lock() 会调 session.clear() 清零 DEK 字节
+        coEvery { unlockVault(any()) } returns Result.success(mockk(relaxed = true))
+        viewModel.unlock("pw")
+        dispatcher.scheduler.advanceUntilIdle()
     }
 
     private fun input() = com.zz.passwordmanager.domain.entries.EntryInput(

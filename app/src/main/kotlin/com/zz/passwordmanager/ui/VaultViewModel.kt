@@ -9,7 +9,9 @@ import com.zz.passwordmanager.data.vault.InitializeRequest
 import com.zz.passwordmanager.data.vault.InitializeVault
 import com.zz.passwordmanager.data.vault.UnlockVault
 import com.zz.passwordmanager.data.vault.VaultSessionManager
+import com.zz.passwordmanager.data.vault.VaultState
 import com.zz.passwordmanager.data.vault.VaultStatus
+import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryRepository
@@ -60,6 +62,44 @@ class VaultViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(VaultUiState(initialized = status.isInitialized()))
     val state: StateFlow<VaultUiState> = _state.asStateFlow()
+
+    init {
+        // 锁定以 VaultSessionManager 为单一事实来源：任何路径的锁定（FR-8 自动锁定、
+        // 密保找回失败后的锁定等）都要反映到 UI，并清空已解密的数据。
+        viewModelScope.launch {
+            sessionManager.state.collect { vaultState ->
+                // 初值即 Locked，用 !locked 守卫避免初始化时把状态清一遍
+                if (vaultState is VaultState.Locked && !_state.value.locked) applyLocked()
+            }
+        }
+    }
+
+    /**
+     * 锁定：UI 回到解锁屏，且不保留任何已解密的标题与明文（NFR-S4/T12）。
+     *
+     * - `revealed` 是明文密码在本项目里唯一的驻留处，必须清；
+     * - `details` 不在 [VaultUiState] 内（易漏），必须清；
+     * - `entries` 含标题/用户名，属敏感内容，锁定态一律不可见（BR-7）；
+     * - `query` 保留：非敏感且是用户意图，解锁后据此重新拉列表更顺手；
+     * - `vaultCorrupted` **不动**：损坏态与锁定态正交，清掉会让「清除重建」入口消失。
+     */
+    private fun applyLocked() {
+        details.clear()
+        _state.update {
+            it.copy(locked = true, entries = emptyList(), revealed = emptyMap(), errorMessage = null)
+        }
+    }
+
+    // ---- FR-8 自动锁定（由 MainActivity 生命周期驱动） ----
+
+    /** 切到后台：记录时刻。由 `MainActivity.onStop` 调用。 */
+    fun onBackground() = sessionManager.onBackground(System.currentTimeMillis())
+
+    /** 回到前台：超期即锁定。档位写死 1 分钟（v1 决策：不做档位 UI 与偏好存储）。 */
+    fun onForeground() = sessionManager.onForeground(System.currentTimeMillis(), AUTO_LOCK_DURATION)
+
+    /** 主动锁定（S51「主动锁定立即生效」）：UI 清理交给 collector 统一做。 */
+    fun lock() = sessionManager.lock()
 
     // ---- 初始化 / 解锁（FR-1 / FR-2） ----
 
@@ -204,4 +244,9 @@ class VaultViewModel @Inject constructor(
     }
 
     private fun refresh(query: String = _state.value.query) = search(query)
+
+    private companion object {
+        /** FR-8 档位写死 1 分钟（2026-09-24 决策：不做档位 UI 与偏好存储，档位选择归二期）。 */
+        val AUTO_LOCK_DURATION = AutoLockDuration.M1
+    }
 }
