@@ -72,7 +72,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
                 biometricEnabled = state.biometricEnabled,
-                onSetBiometric = viewModel::setBiometricEnabled,
+                onBiometricToggle = biometricToggleAction(viewModel),
                 onRunBiometricDiagnostics = { BiometricDiagnostics.run(appContext).toText() },
                 onChangeMasterPassword = { current, new, confirm ->
                     viewModel.submitMasterPasswordChange(current, new, confirm) {
@@ -157,4 +157,37 @@ private fun BiometricDiagnostics.Report.toText(): String = buildString {
     appendLine("Keystore 强认证密钥：$keystoreResult")
     appendLine()
     append(conclusion)
+}
+
+/**
+ * 生物识别开关的编排（v0-10）：**开启**需两段——数据层验主密码 → `BiometricPrompt`
+ * 认证 → 数据层用已认证 cipher 包裹。关闭则只需验主密码。
+ */
+@Composable
+private fun biometricToggleAction(viewModel: VaultViewModel): (Boolean, String) -> Unit {
+    val activity = LocalContext.current as? FragmentActivity
+    val scope = rememberCoroutineScope()
+    val dekStore = (LocalContext.current.applicationContext as? AppApplication)?.biometricDekStore
+    val authenticator = remember(activity, dekStore) {
+        if (activity != null && dekStore != null) BiometricAuthenticator(activity, dekStore) else null
+    }
+
+    return toggle@{ enable, masterPassword ->
+        if (!enable) {
+            viewModel.disableBiometric(masterPassword)
+            return@toggle
+        }
+        if (authenticator == null) return@toggle
+        scope.launch {
+            val setup = viewModel.prepareBiometricEnable(masterPassword) ?: return@launch
+            try {
+                val cipher = authenticator.authenticateEncryptCipher()
+                viewModel.completeBiometricEnable(cipher)
+            } catch (e: BiometricAuthException) {
+                // 取消/失败：暂存的 DEK 必须清零，且不写任何东西
+                viewModel.clearPendingBiometricEnable()
+                viewModel.onBiometricAuthError(e.error)
+            }
+        }
+    }
 }

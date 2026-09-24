@@ -15,6 +15,7 @@ import io.mockk.every
 import io.mockk.verify
 import io.mockk.mockk
 import java.security.SecureRandom
+import javax.crypto.Cipher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -38,10 +39,17 @@ class BiometricToggleTest {
     private val password = "Passw0rd!主密码".toCharArray()
 
     private val dekStore: BiometricDekStore = mockk(relaxed = true) {
-        every { wrap(any()) } answers { firstArg<ByteArray>().reversedArray() }
+        every { wrap(any(), any()) } answers { firstArg<ByteArray>().reversedArray() }
     }
 
-    private fun toggle() = BiometricToggle(keyManager, headerStore, throttle, gate, dekStore)
+    private val toggle get() = BiometricToggle(keyManager, headerStore, throttle, gate, dekStore)
+
+    /** 模拟「已通过生物识别认证的加密 cipher」。 */
+    private val authCipher = mockk<Cipher>(relaxed = true)
+
+    /** 走完开启两段式。 */
+    private suspend fun BiometricToggle.enable(password: CharArray) =
+        completeEnable(prepareEnable(password).getOrThrow(), authCipher)
 
     private suspend fun initialize() {
         assertTrue(
@@ -62,7 +70,7 @@ class BiometricToggleTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
 
-        assertTrue(toggle()(enable = true, masterPassword = password).isSuccess)
+        assertTrue(toggle.enable(password).isSuccess)
         assertTrue(headerStore.read()!!.biometricEnabled)
     }
 
@@ -71,7 +79,8 @@ class BiometricToggleTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.NOT_ENROLLED
 
-        val result = toggle()(enable = true, masterPassword = password)
+        // 硬件门禁在第一段就拦下，早于任何生物识别提示
+        val result = toggle.prepareEnable(password)
 
         val error = (result.exceptionOrNull() as AuthException).error
         assertEquals(
@@ -86,7 +95,7 @@ class BiometricToggleTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.NO_HARDWARE
 
-        val result = toggle()(enable = true, masterPassword = password)
+        val result = toggle.prepareEnable(password)
 
         assertTrue((result.exceptionOrNull() as AuthException).error is AuthError.BiometricUnavailable)
     }
@@ -96,7 +105,7 @@ class BiometricToggleTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.NO_HARDWARE
 
-        assertTrue(toggle()(enable = false, masterPassword = password).isSuccess)
+        assertTrue(toggle.disable(password).isSuccess)
         assertTrue(headerStore.read()!!.biometricEnabled.not())
     }
 
@@ -105,7 +114,8 @@ class BiometricToggleTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
 
-        val result = toggle()(enable = true, masterPassword = "wrong".toCharArray())
+        // 主密码错误发生在第一段，尚未进入生物识别
+        val result = toggle.prepareEnable("wrong".toCharArray())
 
         assertTrue((result.exceptionOrNull() as AuthException).error is AuthError.WrongPassword)
     }
@@ -117,7 +127,7 @@ class BiometricToggleTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
 
-        assertTrue(toggle()(enable = true, masterPassword = password).isSuccess)
+        assertTrue(toggle.enable(password).isSuccess)
 
         val header = headerStore.read()!!
         assertTrue(header.biometricEnabled)
@@ -130,9 +140,9 @@ class BiometricToggleTest {
     fun `disable clears the wrapped dek and deletes the keystore key`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
-        toggle()(enable = true, masterPassword = password)
+        toggle.enable(password)
 
-        assertTrue(toggle()(enable = false, masterPassword = password).isSuccess)
+        assertTrue(toggle.disable(password).isSuccess)
 
         val header = headerStore.read()!!
         assertNull("关闭后不应残留包裹密文", header.wrappedDekBiometric)
@@ -145,9 +155,9 @@ class BiometricToggleTest {
     fun `failing keystore wrap surfaces setup failure rather than half enabling or blaming hardware`() = runTest {
         initialize()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
-        every { dekStore.wrap(any()) } throws IllegalStateException("keystore refused")
+        every { dekStore.wrap(any(), any()) } throws IllegalStateException("keystore refused")
 
-        val result = toggle()(enable = true, masterPassword = password)
+        val result = toggle.enable(password)
 
         // v0.10：包裹失败必须与「硬件不可用/未录入」区分开——
         // 旧实现一律报 BiometricUnavailable，把「写密钥失败」说成了「设备不支持」，

@@ -234,14 +234,59 @@ class VaultViewModel @Inject constructor(
         _state.update { it.copy(biometricEnabled = enabled, biometricAvailable = available) }
     }
 
-    /** P-03：开启/关闭生物识别快捷解锁，须验当前主密码。 */
-    fun setBiometricEnabled(enable: Boolean, masterPassword: String) {
+    // ---- P-03 生物识别开关（开启为两段式，见 BiometricToggle 的 KDoc） ----
+
+    /** 关闭：验主密码后清除。 */
+    fun disableBiometric(masterPassword: String) {
         viewModelScope.launch {
-            biometricToggle(enable, masterPassword.toCharArray()).fold(
+            biometricToggle.disable(masterPassword.toCharArray()).fold(
                 onSuccess = { refreshBiometricAvailability() },
                 onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
+    }
+
+    /**
+     * 开启第一段：验主密码 + 硬件门禁。成功后 UI 需弹出 `BiometricPrompt`，
+     * 再调 [completeBiometricEnable] 传入**已认证**的加密 cipher。
+     *
+     * 返回待包裹的 DEK 句柄；UI 在认证成功、失败或取消时都必须调用 [clearPendingBiometricEnable]。
+     */
+    suspend fun prepareBiometricEnable(masterPassword: String): BiometricToggle.EnableSetup? {
+        _state.update { it.copy(errorMessage = null) }
+        val setup = biometricToggle.prepareEnable(masterPassword.toCharArray()).getOrElse { e ->
+            _state.update { it.copy(errorMessage = userMessage(e)) }
+            return null
+        }
+        pendingBiometricEnable = setup
+        return setup
+    }
+
+    /** 开启第二段：包裹并落盘。 */
+    fun completeBiometricEnable(authenticatedCipher: Cipher) {
+        val setup = pendingBiometricEnable
+        pendingBiometricEnable = null
+        if (setup == null) return
+        viewModelScope.launch {
+            biometricToggle.completeEnable(setup, authenticatedCipher).fold(
+                onSuccess = {
+                    setup.clear()
+                    refreshBiometricAvailability()
+                },
+                onFailure = { e ->
+                    setup.clear()
+                    _state.update { it.copy(errorMessage = userMessage(e)) }
+                    refreshBiometricAvailability()
+                },
+            )
+        }
+    }
+
+    /** 认证被取消/失败：清零暂存的 DEK，不落任何东西。 */
+    fun clearPendingBiometricEnable() {
+        pendingBiometricEnable?.clear()
+        pendingBiometricEnable = null
+        _state.update { it.copy(biometricAuthenticating = false) }
     }
 
     // ---- P-07 修改主密码（V1-3） ----
@@ -333,6 +378,7 @@ class VaultViewModel @Inject constructor(
     // ---- 列表 / 搜索（FR-5） ----
 
     private val details = mutableStateMapOf<String, EntryDetail?>()
+    private var pendingBiometricEnable: BiometricToggle.EnableSetup? = null
 
     /** 详情/编辑页的数据源：AppNav 经 [detailFor] 观察。 */
     fun detailFor(id: String): EntryDetail? = details[id]

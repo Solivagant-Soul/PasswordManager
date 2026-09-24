@@ -59,8 +59,9 @@ class UnlockWithBiometricTest {
             ),
         ).getOrThrow()
         every { gate.availability() } returns BiometricGate.Availability.AVAILABLE
-        every { dekStore.wrap(any()) } returns WRAPPED
-        toggle.invoke(enable = true, masterPassword = password).getOrThrow()
+        every { dekStore.wrap(any(), any()) } returns WRAPPED
+        val setup = toggle.prepareEnable(password).getOrThrow()
+        toggle.completeEnable(setup, authenticatedCipher).getOrThrow()
     }
 
     @Test

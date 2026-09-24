@@ -37,13 +37,32 @@ class BiometricAuthenticator(
      * 取消/失败不视为错误处理上的异常，一律通过 [BiometricAuthException] 携带
      * 可静默降级的 [AuthError] 交由调用方决定是否提示（取消不应被当成错误提示用户）。
      */
-    suspend fun authenticateDecryptCipher(): Cipher = suspendCancellableCoroutine { continuation ->
-        // ① 认证前建 cipher
+    suspend fun authenticateDecryptCipher(): Cipher =
+        authenticate(title = "解锁密码库", subtitle = "使用指纹或面容验证") { dekStore.createDecryptCipher() }
+
+    /**
+     * 开启快捷解锁时用：认证并返回**已认证的加密 cipher**（v0.10）。
+     *
+     * 之所以开启也要认证：Keystore 对 auth-required 密钥的加密与解密一视同仁，
+     * 包裹 DEK 这一步同样需要认证。顺带的好处是——开启时就验证了生物识别真的能用，
+     * 避免「开了之后到解锁时才发现不可用」。
+     */
+    suspend fun authenticateEncryptCipher(): Cipher =
+        authenticate(title = "启用生物识别解锁", subtitle = "请先验证一次指纹或面容") {
+            dekStore.createEncryptCipher()
+        }
+
+    private suspend fun authenticate(
+        title: String,
+        subtitle: String,
+        createCipher: () -> Cipher,
+    ): Cipher = suspendCancellableCoroutine { continuation ->
+        // ① 认证前建 cipher（auth-per-use 的时序要求）
         val cipher = try {
-            dekStore.createDecryptCipher()
+            createCipher()
         } catch (e: Exception) {
             continuation.resumeWithException(
-                BiometricAuthException(AuthError.BiometricKeyInvalidated),
+                BiometricAuthException(AuthError.BiometricSetupFailed("${e.javaClass.simpleName}: ${e.message}")),
             )
             return@suspendCancellableCoroutine
         }
@@ -55,7 +74,7 @@ class BiometricAuthenticator(
                 val authenticated = result.cryptoObject?.cipher
                 if (authenticated == null) {
                     continuation.resumeWithException(
-                        BiometricAuthException(AuthError.BiometricKeyInvalidated),
+                        BiometricAuthException(AuthError.BiometricSetupFailed("认证成功但未返回加密对象")),
                     )
                 } else {
                     continuation.resume(authenticated)
@@ -76,8 +95,8 @@ class BiometricAuthenticator(
             callback,
         )
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("解锁密码库")
-            .setSubtitle("使用指纹或面容验证")
+            .setTitle(title)
+            .setSubtitle(subtitle)
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .setNegativeButtonText("用主密码")
             .build()

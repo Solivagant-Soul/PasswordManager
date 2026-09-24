@@ -15,8 +15,21 @@ import javax.crypto.Cipher
  */
 interface BiometricDekStore {
 
-    /** 包裹 DEK 快捷副本（无需认证；需已解锁会话）。 */
-    fun wrap(dek: ByteArray): ByteArray
+    /**
+     * 为 `BiometricPrompt` + `CryptoObject` 预建**加密** cipher。
+     * 与 [createDecryptCipher] 同样必须在认证**之前**调用。
+     */
+    fun createEncryptCipher(): Cipher
+
+    /**
+     * 包裹 DEK 快捷副本，用**已通过认证**的加密 cipher。
+     *
+     * 之所以也要认证：Android 对 `setUserAuthenticationRequired(true)` 的密钥，
+     * **加密与解密同样要求认证**（v0.10 实机踩坑：曾假设「开启时已验过主密码，
+     * 包裹就不必认证」——该假设是错的，导致开启直接失败）。因此开启快捷解锁
+     * 本身就要求先做一次生物识别认证。
+     */
+    fun wrap(dek: ByteArray, authenticatedCipher: Cipher): ByteArray
 
     /**
      * 为 `BiometricPrompt` + `CryptoObject` 预建解密 cipher。

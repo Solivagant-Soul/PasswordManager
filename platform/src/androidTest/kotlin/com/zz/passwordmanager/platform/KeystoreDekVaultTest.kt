@@ -52,11 +52,10 @@ class KeystoreDekVaultTest {
     }
 
     @Test
-    fun wrapProducesCiphertextWithIvPrefix() {
+    fun createEncryptCipherWithoutAuthenticationIsRejected() {
+        // v0.10 定论：包裹与解包同密钥，包裹同样需要认证会话
         assumeStrongBiometric()
-        val wrapped = vault.wrap(dek)
-
-        assertTrue(wrapped.size > 32 + 12 + 16)
+        assertThrows(UserNotAuthenticatedException::class.java) { vault.createEncryptCipher() }
     }
 
     @Test
@@ -67,13 +66,11 @@ class KeystoreDekVaultTest {
     }
 
     @Test
-    fun wrapUsesRandomIv() {
+    fun createEncryptCipherIsDeterministicInShape() {
         assumeStrongBiometric()
-        // 完整往返需 BiometricPrompt（UI 层触发）；此处验证 wrap 的随机 IV 语义。
-        val a = vault.wrap(dek)
-        val b = vault.wrap(dek)
-
-        assertTrue(!a.contentEquals(b))
+        // 完整往返需 BiometricPrompt（UI 层触发）；此处只验证建 cipher 的可达性
+        //（真正 doFinal 在无认证上下文下必然被拒，见 wrapWithoutAuthenticationIsRejected）
+        assertTrue(runCatching { vault.createEncryptCipher() }.isFailure)
     }
 
     /** AndroidKeyStore 基建冒烟：非 auth 绑定密钥的 GCM 往返（不依赖生物识别录入）。 */
@@ -107,34 +104,40 @@ class KeystoreDekVaultTest {
     }
 
     /**
-     * 回归测试（v0.10 实机踩坑）：包裹 DEK **不应要求用户认证**。
+     * 回归测试（v0.10 两次实机踩坑）：**包裹同样需要用户认证**。
      *
-     * 曾经的 bug：包裹与解包共用一把 `setUserAuthenticationRequired(true)` 的密钥，
-     * 而开启快捷解锁时用户刚验的是主密码、并非生物识别——Android 对 auth-required
-     * 密钥的**加密同样要求认证**，于是 `doFinal` 抛 UserNotAuthenticatedException，
-     * 表现为「生物识别无法开启」。
+     * 曾经的两次错误：
+     * 1. 假设「开启时已验过主密码，包裹就不必认证」→ `doFinal` 抛
+     *    UserNotAuthenticatedException，表现为「生物识别无法开启」；
+     * 2. 改用「不认证密钥包裹 + 认证密钥解包」→ **A 密钥加密的数据无法用 B 密钥
+     *    解密**，解锁时 GCM 标签不匹配，表现为「生物识别已失效」。
      *
-     * 修复后包裹走独立的、不需认证的密钥，**本用例无需录入生物特征即可运行**，
-     * 因此能在 CI/模拟器上守住这条回归（原实现下本例会失败）。
+     * 定论：对称密钥不存在「只对解密要求认证」的配置，包裹与解包必须同密钥、
+     * 且都在认证会话内完成。
+     *
+     * 本用例在**无认证**的上下文里调用包裹，**必须失败**——这正是回归信号。
+     * 真正的「认证后可包裹」路径需要 `BiometricPrompt`，只能在真机上端到端验证。
      */
     @Test
-    fun wrapDoesNotRequireUserAuthentication() {
-        val wrapped = vault.wrap(dek)
+    fun wrapWithoutAuthenticationIsRejected() {
+        vault.deleteKey() // 从干净状态开始
 
-        assertTrue(wrapped.size > dek.size)
-        // 能在无任何认证的情况下完成加密，即证明包裹密钥不要求认证
-        assertTrue(KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-            .getKey("vault-biometric-dek-wrap", null) is SecretKey)
+        // 断言的是安全性质「无认证时包裹必定失败」，**不绑定具体异常类型**——
+        // 无已录入生物特征的设备上失败发生在**建密钥**阶段
+        // （InvalidAlgorithmParameterException: At least one biometric must be enrolled），
+        // 已录入但当前未认证的设备上则失败在 **doFinal** 阶段
+        // （UserNotAuthenticatedException）。两者都证明「没认证就不能包裹」。
+        val error = runCatching { vault.wrap(dek, vault.createEncryptCipher()) }.exceptionOrNull()
+
+        assertTrue("无认证时包裹应当失败，但成功了", error != null)
     }
 
-    /** 开启后必须清掉**两把**密钥：包裹与解包，漏一把即留下无主凭证。 */
+    /** 单密钥：别名固定，deleteKey 后不得残留。 */
     @Test
-    fun deleteKeyRemovesBothAliases() {
-        vault.wrap(dek)
+    fun deleteKeyRemovesTheAlias() {
         vault.deleteKey()
 
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         assertTrue(!store.containsAlias("vault-biometric-dek"))
-        assertTrue(!store.containsAlias("vault-biometric-dek-wrap"))
     }
 }

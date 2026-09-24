@@ -35,7 +35,7 @@ fun SettingsScreen(
     biometricEnabled: Boolean,
     onRunBiometricDiagnostics: () -> String,
     onChangeMasterPassword: (current: String, new: String, confirm: String) -> Unit,
-    onSetBiometric: (enable: Boolean, masterPassword: String) -> Unit,
+    onBiometricToggle: (enable: Boolean, masterPassword: String) -> Unit,
     onBack: () -> Unit,
 ) {
     var current by remember { mutableStateOf("") }
@@ -133,7 +133,7 @@ fun SettingsScreen(
             title = { Text(if (enable) "开启生物识别解锁" else "关闭生物识别解锁") },
             text = {
                 Column {
-                    Text("请输入当前主密码以确认。")
+                    Text(if (enable) "请输入当前主密码以确认，随后需验证一次指纹或面容。" else "请输入当前主密码以确认。")
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -146,7 +146,7 @@ fun SettingsScreen(
                 TextButton(
                     enabled = password.isNotEmpty(),
                     onClick = {
-                        onSetBiometric(enable, password)
+                        onBiometricToggle(enable, password)
                         showBiometricPasswordPrompt = null
                     },
                 ) { Text("确认") }
