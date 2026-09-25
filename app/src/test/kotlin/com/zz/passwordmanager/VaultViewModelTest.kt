@@ -33,6 +33,7 @@ import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -426,6 +427,8 @@ class VaultViewModelTest {
     /** v2.1/F3：收藏后必须重载详情，否则详情页星标永远停在旧值。 */
     @Test
     fun `toggling favorite reloads the detail so the star flips (F3)`() = runTest(dispatcher) {
+        // loadDetail 有锁定守卫（锁定态不写回详情），而收藏本就是解锁态动作，故先解锁
+        unlockSuccessfully()
         // EntryDetail 的必填字段：id/title/username/url/notes/categoryId/tags/totpEnabled/createdAt/updatedAt
         // （favorite 与 type 有默认值，此处显式给出以表明测试意图）
         val detail = EntryDetail(
@@ -461,6 +464,63 @@ class VaultViewModelTest {
         viewModel.copyPassword("e1")
         dispatcher.scheduler.advanceUntilIdle()
         assertEquals(VaultViewModel.COPY_FEEDBACK, viewModel.state.first().successMessage)
+    }
+
+    /**
+     * 竞态：详情读取在飞行中被锁定（BR-7）。
+     *
+     * 用 [gate] 把 `repository.get()` 精确卡在挂起点，制造「get 返回 → 写回 `details`」之间
+     * 恰好发生锁定的窗口。`applyLocked()` 已经清过一遍，缺守卫的话这次迟到的写回会把
+     * 已解密的标题/备注重新塞回锁定态。
+     */
+    @Test
+    fun `locking while detail load is in flight leaves no decrypted detail behind`() = runTest(dispatcher) {
+        unlockSuccessfully()
+        val gate = CompletableDeferred<Unit>()
+        coEvery { repository.get("e1") } coAnswers {
+            gate.await()
+            EntryDetail(
+                id = "e1", title = "GitHub", username = "u",
+                url = null, notes = null, categoryId = null,
+                tags = emptyList(), totpEnabled = false, createdAt = 0L, updatedAt = 0L,
+            )
+        }
+
+        viewModel.loadDetail("e1")
+        dispatcher.scheduler.advanceUntilIdle() // 协程跑到 gate.await() 挂起
+        sessionManager.lock()
+        dispatcher.scheduler.advanceUntilIdle() // collector 派生 locked，applyLocked() 清 details
+        gate.complete(Unit)
+        dispatcher.scheduler.advanceUntilIdle() // 放行，get() 这时才返回
+
+        assertTrue("前提：应处于锁定态", viewModel.state.first().locked)
+        assertNull("锁定后不得把已解密详情写回", viewModel.detailFor("e1"))
+    }
+
+    /**
+     * 竞态：明文揭示在飞行中被锁定（T17「明文不残留」/ NFR-S4）。
+     *
+     * 同上编排，但卡的是 `revealPassword()`。`revealed` 是明文密码在本项目里唯一的驻留处，
+     * 锁定后把它写回去比写回标题严重得多。
+     */
+    @Test
+    fun `locking while reveal is in flight leaves no plaintext behind`() = runTest(dispatcher) {
+        unlockSuccessfully()
+        val gate = CompletableDeferred<Unit>()
+        coEvery { repository.revealPassword("e1") } coAnswers {
+            gate.await()
+            Result.success("s3cret".toCharArray())
+        }
+
+        viewModel.reveal("e1")
+        dispatcher.scheduler.advanceUntilIdle() // 协程跑到 gate.await() 挂起
+        sessionManager.lock()
+        dispatcher.scheduler.advanceUntilIdle() // collector 派生 locked，applyLocked() 清 revealed
+        gate.complete(Unit)
+        dispatcher.scheduler.advanceUntilIdle() // 放行，明文这时才到手
+
+        assertTrue("前提：应处于锁定态", viewModel.state.first().locked)
+        assertTrue("锁定后明文密码不得写回", viewModel.state.first().revealed.isEmpty())
     }
 
     private suspend fun unlockSuccessfully() {

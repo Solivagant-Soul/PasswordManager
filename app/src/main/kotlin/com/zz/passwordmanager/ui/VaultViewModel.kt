@@ -445,7 +445,11 @@ class VaultViewModel @Inject constructor(
     fun loadDetail(id: String) {
         viewModelScope.launch {
             try {
-                details[id] = entryRepository.get(id)
+                val detail = entryRepository.get(id)
+                // 锁定与本次读取并发时，applyLocked() 已清空 details；
+                // 不守卫就会把已解密内容写回锁定态，违反 BR-7「锁定态一律不可见」
+                if (_state.value.locked) return@launch
+                details[id] = detail
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = userMessage(e)) }
             }
@@ -585,7 +589,12 @@ class VaultViewModel @Inject constructor(
     fun reveal(id: String) {
         viewModelScope.launch {
             entryRepository.revealPassword(id).fold(
-                onSuccess = { pw -> _state.update { it.copy(revealed = it.revealed + (id to pw.concatToString())) } },
+                onSuccess = { pw ->
+                    // 锁定与本次揭示并发时，applyLocked() 已清空 revealed；
+                    // 不守卫就会把明文密码写回锁定态，违反 T17「明文不残留」/ NFR-S4
+                    if (_state.value.locked) return@launch
+                    _state.update { it.copy(revealed = it.revealed + (id to pw.concatToString())) }
+                },
                 onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
