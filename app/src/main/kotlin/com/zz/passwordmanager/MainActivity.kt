@@ -3,11 +3,11 @@ package com.zz.passwordmanager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.zz.passwordmanager.ui.AppNav
 import com.zz.passwordmanager.ui.VaultViewModel
+import com.zz.passwordmanager.ui.theme.PasswordManagerTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -35,7 +35,7 @@ class MainActivity : FragmentActivity() {
         // 防后台截图/录屏：密码管理器内容不进最近任务缩略图（NFR-S，v1 取最省的一行实现）
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
-            MaterialTheme {
+            PasswordManagerTheme {
                 AppNav(viewModel = viewModel)
             }
         }
