@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * T19/feature 04 验收：按规则生成、未选字符集、长度越界、4/64 边界、排除易混淆字符。
+ * T19/feature 04 验收：按规则生成、未选字符集、长度越界、4/32 边界、排除易混淆字符。
  * 随机源注入确定性序列，断言可重复。
  */
 class PasswordGeneratorTest {
@@ -80,7 +80,7 @@ class PasswordGeneratorTest {
 
     @Test
     fun `excludes ambiguous characters when asked`() {
-        val rules = PasswordGenerator.Rules(length = 64, excludeAmbiguous = true)
+        val rules = PasswordGenerator.Rules(length = 32, excludeAmbiguous = true)
 
         val password = PasswordGenerator.generate(rules).getOrThrow().concatToString()
 
@@ -110,5 +110,25 @@ class PasswordGeneratorTest {
 
         assertEquals(16, password.length)
         assertTrue(password.none { it in PasswordGenerator.AMBIGUOUS_CHARS })
+    }
+
+    /** v2.1：长度上界由 64 收窄到 32（spec D-长度），边界两侧都要钉住。 */
+    @Test
+    fun `upper boundary 32 is accepted`() {
+        val rules = PasswordGenerator.Rules(length = 32, excludeAmbiguous = true)
+        val result = PasswordGenerator.generate(rules)
+        assertTrue(result.isSuccess)
+        assertEquals(32, result.getOrThrow().size)
+    }
+
+    @Test
+    fun `length above 32 is rejected`() {
+        val rules = PasswordGenerator.Rules(length = 33, excludeAmbiguous = true)
+        val result = PasswordGenerator.generate(rules)
+        assertTrue(result.isFailure)
+        assertEquals(
+            PasswordGenerator.Reason.LENGTH_OUT_OF_RANGE,
+            (result.exceptionOrNull() as PasswordGenerator.GeneratorException).reason,
+        )
     }
 }

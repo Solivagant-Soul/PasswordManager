@@ -51,6 +51,7 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
         val DEFAULT_AUTO_LOCK = AutoLockDuration.M1
         const val DEFAULT_LENGTH = 16
         const val MIN_LENGTH = 4
-        const val MAX_LENGTH = 64
+        // 与 PasswordGenerator.LENGTH_MAX 对齐：否则用户能存进 33，打开生成器页却被夹断
+        const val MAX_LENGTH = 32
     }
 }

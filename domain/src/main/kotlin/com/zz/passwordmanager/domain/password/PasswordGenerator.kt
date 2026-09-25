@@ -7,7 +7,7 @@ import java.security.SecureRandom
  *
  * 字符分类沿用 [PasswordPolicy] 的语义（大写/小写/数字/符号四类），但**不复用其
  * `charClassCount`**——那个是 private 且只返回「有几类」，而生成器需要的是
- * 「用户勾选了哪几类」。另有两处语义差异：长度区间是 4–64（policy 最短 8），
+ * 「用户勾选了哪几类」。另有两处语义差异：长度区间是 4–32（policy 最短 8），
  * 以及 policy 的 CONTROL_CHARS / BLANK_ONLY 规则对生成器无意义。
  *
  * 随机源固定为 [SecureRandom]（不注入 `kotlin.random.Random`：`Random` 的默认实现
@@ -15,9 +15,9 @@ import java.security.SecureRandom
  */
 object PasswordGenerator {
 
-    /** 长度区间（feature 04 边界场景：4 与 64 均为合法值）。 */
+    /** 长度区间（feature 04 边界场景：4 与 32 均为合法值；v2.1 由 64 收窄为 32）。 */
     const val LENGTH_MIN = 4
-    const val LENGTH_MAX = 64
+    const val LENGTH_MAX = 32
 
     /** 可选字符集（四类，与需求 §6.1 的分类一致）。 */
     enum class CharSet(val chars: String) {
