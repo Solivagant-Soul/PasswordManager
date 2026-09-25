@@ -22,6 +22,7 @@ import com.zz.passwordmanager.domain.preferences.UserPreferences
 import com.zz.passwordmanager.domain.security.SecurityScanner
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryRepository
+import com.zz.passwordmanager.domain.password.GeneratorOptions
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
 import com.zz.passwordmanager.ui.UnlockFormData
 import com.zz.passwordmanager.ui.VaultViewModel
@@ -86,6 +87,7 @@ class VaultViewModelTest {
     fun setUp() {
         every { preferences.autoLockDuration } returns flowOf(AutoLockDuration.M1)
         every { preferences.defaultPasswordLength } returns flowOf(16)
+        every { preferences.generatorOptions } returns flowOf(GeneratorOptions())
         Dispatchers.setMain(dispatcher)
         viewModel = VaultViewModel(
             unlockVault, initializeVault, destroyVault, resetVault,
@@ -521,6 +523,46 @@ class VaultViewModelTest {
 
         assertTrue("前提：应处于锁定态", viewModel.state.first().locked)
         assertTrue("锁定后明文密码不得写回", viewModel.state.first().revealed.isEmpty())
+    }
+
+    /** v2.1/D4：生成器选项经偏好流回写状态，生成器页与编辑页读同一份。 */
+    @Test
+    fun `generator options flow into observable state (D4)`() = runTest(dispatcher) {
+        val custom = GeneratorOptions(useUpper = false, useLower = true, useDigit = true, useSymbol = false)
+        every { preferences.generatorOptions } returns flowOf(custom)
+        coEvery { preferences.setGeneratorOptions(any()) } just runs
+        viewModel = VaultViewModel(
+            unlockVault, initializeVault, destroyVault, resetVault,
+            changeMasterPassword, readSecurityQuestions,
+            unlockWithBiometric, biometricToggle, gate,
+            repository, categoryRepository, securityScanner, preferences,
+            clipboard, sessionManager, status,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(custom, viewModel.state.first().generatorOptions)
+
+        viewModel.setGeneratorOptions(GeneratorOptions(excludeAmbiguous = false))
+        dispatcher.scheduler.advanceUntilIdle()
+        coVerify { preferences.setGeneratorOptions(GeneratorOptions(excludeAmbiguous = false)) }
+    }
+
+    /**
+     * v2.1：生成器上界收窄为 32 后，升级用户 DataStore 里的越界长度必须在状态边界被收敛——
+     * 否则 Task 11 的编辑页一键生成会拿到越界长度而静默失败（generate() 返回 LENGTH_OUT_OF_RANGE），
+     * 并弹出与真实原因无关的「请勾选字符集」提示。
+     */
+    @Test
+    fun `stale out of range default length is clamped into state`() = runTest(dispatcher) {
+        every { preferences.defaultPasswordLength } returns flowOf(40)
+        viewModel = VaultViewModel(
+            unlockVault, initializeVault, destroyVault, resetVault,
+            changeMasterPassword, readSecurityQuestions,
+            unlockWithBiometric, biometricToggle, gate,
+            repository, categoryRepository, securityScanner, preferences,
+            clipboard, sessionManager, status,
+        )
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(32, viewModel.state.first().defaultPasswordLength)
     }
 
     private suspend fun unlockSuccessfully() {

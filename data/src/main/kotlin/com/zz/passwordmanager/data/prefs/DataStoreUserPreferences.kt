@@ -3,11 +3,13 @@ package com.zz.passwordmanager.data.prefs
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
+import com.zz.passwordmanager.domain.password.GeneratorOptions
 import com.zz.passwordmanager.domain.preferences.UserPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -37,8 +39,32 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
         prefs[KEY_DEFAULT_LENGTH] ?: DEFAULT_LENGTH
     }
 
+    /**
+     * v2.1/D4：五个开关各自独立取值，**缺键一律回落 true**——
+     * 用 `prefs[KEY] ?: true` 而非 `prefs[KEY] ?: false`，否则首次安装拿到空字符集。
+     */
+    override val generatorOptions: Flow<GeneratorOptions> = store.data.map { prefs ->
+        GeneratorOptions(
+            useUpper = prefs[KEY_USE_UPPER] ?: true,
+            useLower = prefs[KEY_USE_LOWER] ?: true,
+            useDigit = prefs[KEY_USE_DIGIT] ?: true,
+            useSymbol = prefs[KEY_USE_SYMBOL] ?: true,
+            excludeAmbiguous = prefs[KEY_EXCLUDE_AMBIGUOUS] ?: true,
+        )
+    }
+
     override suspend fun setAutoLockDuration(duration: AutoLockDuration) {
         store.edit { it[KEY_AUTO_LOCK] = duration.name }
+    }
+
+    override suspend fun setGeneratorOptions(options: GeneratorOptions) {
+        store.edit {
+            it[KEY_USE_UPPER] = options.useUpper
+            it[KEY_USE_LOWER] = options.useLower
+            it[KEY_USE_DIGIT] = options.useDigit
+            it[KEY_USE_SYMBOL] = options.useSymbol
+            it[KEY_EXCLUDE_AMBIGUOUS] = options.excludeAmbiguous
+        }
     }
 
     override suspend fun setDefaultPasswordLength(length: Int) {
@@ -48,6 +74,11 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
     private companion object {
         val KEY_AUTO_LOCK = stringPreferencesKey("auto_lock_duration")
         val KEY_DEFAULT_LENGTH = intPreferencesKey("default_password_length")
+        val KEY_USE_UPPER = booleanPreferencesKey("gen_use_upper")
+        val KEY_USE_LOWER = booleanPreferencesKey("gen_use_lower")
+        val KEY_USE_DIGIT = booleanPreferencesKey("gen_use_digit")
+        val KEY_USE_SYMBOL = booleanPreferencesKey("gen_use_symbol")
+        val KEY_EXCLUDE_AMBIGUOUS = booleanPreferencesKey("gen_exclude_ambiguous")
         val DEFAULT_AUTO_LOCK = AutoLockDuration.M1
         const val DEFAULT_LENGTH = 16
         const val MIN_LENGTH = 4

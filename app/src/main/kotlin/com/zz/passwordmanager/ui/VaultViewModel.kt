@@ -29,6 +29,9 @@ import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.entries.EntrySummary
+import com.zz.passwordmanager.domain.password.GeneratorOptions
+import com.zz.passwordmanager.domain.password.PasswordGenerator.LENGTH_MAX
+import com.zz.passwordmanager.domain.password.PasswordGenerator.LENGTH_MIN
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.crypto.Cipher
@@ -73,6 +76,8 @@ data class VaultUiState(
     val securityReport: com.zz.passwordmanager.domain.security.SecurityReport? = null,
     /** 默认密码长度（T41/FR-16）：生成器初值，设置项可改。 */
     val defaultPasswordLength: Int = 16,
+    /** v2.1/D4：生成器选项（长度之外的四个字符集开关 + 排除易混淆），全局共享。 */
+    val generatorOptions: GeneratorOptions = GeneratorOptions(),
     /** 全部分类（列表 chips 用）。 */
     val categories: List<Category> = emptyList(),
     /** 当前分类筛选（null = 全部）。 */
@@ -125,7 +130,15 @@ class VaultViewModel @Inject constructor(
         }
         viewModelScope.launch {
             preferences.defaultPasswordLength.collect { length ->
-                _state.update { it.copy(defaultPasswordLength = length) }
+                // v2.1：上界由 64 收到 32，但升级用户的 DataStore 里可能仍存着越界值。
+                // 在状态边界收敛一次，后续所有消费方（生成器页、编辑页一键生成）都拿到合法长度，
+                // 不会各自重复 coerce、也不会因 LENGTH_OUT_OF_RANGE 静默失败。
+                _state.update { it.copy(defaultPasswordLength = length.coerceIn(LENGTH_MIN, LENGTH_MAX)) }
+            }
+        }
+        viewModelScope.launch {
+            preferences.generatorOptions.collect { options ->
+                _state.update { it.copy(generatorOptions = options) }
             }
         }
         refreshBiometricAvailability()
@@ -182,6 +195,10 @@ class VaultViewModel @Inject constructor(
 
     fun setDefaultPasswordLength(length: Int) {
         viewModelScope.launch { preferences.setDefaultPasswordLength(length) }
+    }
+
+    fun setGeneratorOptions(options: GeneratorOptions) {
+        viewModelScope.launch { preferences.setGeneratorOptions(options) }
     }
 
     // ---- 主动锁定 ----

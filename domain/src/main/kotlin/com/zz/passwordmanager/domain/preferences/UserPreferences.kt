@@ -1,6 +1,7 @@
 package com.zz.passwordmanager.domain.preferences
 
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
+import com.zz.passwordmanager.domain.password.GeneratorOptions
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -13,6 +14,10 @@ interface UserPreferences {
     val autoLockDuration: Flow<AutoLockDuration>
     val defaultPasswordLength: Flow<Int>
 
+    /** v2.1/D4：生成器选项（编辑页与生成器页共用）。 */
+    val generatorOptions: Flow<GeneratorOptions>
+
     suspend fun setAutoLockDuration(duration: AutoLockDuration)
     suspend fun setDefaultPasswordLength(length: Int)
+    suspend fun setGeneratorOptions(options: GeneratorOptions)
 }
