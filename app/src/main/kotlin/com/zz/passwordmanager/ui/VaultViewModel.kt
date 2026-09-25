@@ -59,6 +59,8 @@ data class VaultUiState(
     val errorMessage: String? = null,
     /** 成功提示（如「主密码已重置，请用新密码解锁」）。 */
     val successMessage: String? = null,
+    /** FR-8 自动锁定档位（T40/v2.1 F1）：移入状态，设置页点一下即重组。 */
+    val autoLockDuration: AutoLockDuration = AutoLockDuration.M1,
     /** Header 完整性校验失败（G-B）：数据不可用，UI 据此提供「清除重建」入口。 */
     val vaultCorrupted: Boolean = false,
     /** FR-12 密保找回表单模式：解锁屏切换为「答密保 + 重设主密码」。 */
@@ -117,7 +119,9 @@ class VaultViewModel @Inject constructor(
     init {
         // 订阅偏好：自动锁定档位与生成器默认长度都「改了立刻生效」
         viewModelScope.launch {
-            preferences.autoLockDuration.collect { autoLockDuration = it }
+            preferences.autoLockDuration.collect { duration ->
+                _state.update { it.copy(autoLockDuration = duration) }
+            }
         }
         viewModelScope.launch {
             preferences.defaultPasswordLength.collect { length ->
@@ -167,19 +171,13 @@ class VaultViewModel @Inject constructor(
      * 回到前台：超期即锁定。档位取自用户偏好（T40/FR-16，默认 1 分钟）。
      * 订阅式读取——设置里改了档位立即生效，不必重启。
      */
-    fun onForeground() = sessionManager.onForeground(System.currentTimeMillis(), autoLockDuration)
+    fun onForeground() = sessionManager.onForeground(System.currentTimeMillis(), _state.value.autoLockDuration)
 
     // ---- 用户偏好（T39–T41） ----
 
-    /** 当前自动锁定档位。 */
-    var autoLockDuration: AutoLockDuration = AutoLockDuration.M1
-        private set
-
     fun setAutoLockDuration(duration: AutoLockDuration) {
-        viewModelScope.launch {
-            preferences.setAutoLockDuration(duration)
-            autoLockDuration = duration
-        }
+        // 状态由上面的 collector 从偏好流回写；这里只负责落盘
+        viewModelScope.launch { preferences.setAutoLockDuration(duration) }
     }
 
     fun setDefaultPasswordLength(length: Int) {
@@ -518,12 +516,15 @@ class VaultViewModel @Inject constructor(
 
     /**
      * 切换收藏（FR-5）。列表与详情两处入口共用；
-     * 保存后由 Room Flow 自动重发，两屏同时刷新，无需手动通知。
+     * 列表由 Room Flow 自动重发，但详情页的数据源是 [details]，不重载不会刷新（F3）。
      */
     fun toggleFavorite(id: String, favorite: Boolean) {
         viewModelScope.launch {
-            entryRepository.setFavorite(id, favorite)
-                .onFailure { e -> _state.update { it.copy(errorMessage = userMessage(e)) } }
+            entryRepository.setFavorite(id, favorite).fold(
+                // 详情页数据源是 details 而非列表 Flow，不重载的话星标不会翻转（F3）
+                onSuccess = { loadDetail(id) },
+                onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
+            )
         }
     }
 
@@ -597,12 +598,16 @@ class VaultViewModel @Inject constructor(
     /** 复制生成器产出的密码（走同一套剪贴板 30 秒清理，FR-4「可复制」）。 */
     fun copyGeneratedPassword(password: String) {
         clipboard.copySensitive(password)
+        _state.update { it.copy(successMessage = COPY_FEEDBACK) }
     }
 
     fun copyPassword(id: String) {
         viewModelScope.launch {
             entryRepository.revealPassword(id).fold(
-                onSuccess = { pw -> clipboard.copySensitive(pw.concatToString()) },
+                onSuccess = { pw ->
+                    clipboard.copySensitive(pw.concatToString())
+                    _state.update { it.copy(successMessage = COPY_FEEDBACK) }
+                },
                 onFailure = { e -> _state.update { it.copy(errorMessage = userMessage(e)) } },
             )
         }
@@ -640,6 +645,15 @@ class VaultViewModel @Inject constructor(
         _state.update { it.copy(errorMessage = null) }
     }
 
+    /** 清掉一次性成功提示（Snackbar 展示完毕后由 UI 调用）。 */
+    fun dismissSuccess() {
+        _state.update { it.copy(successMessage = null) }
+    }
+
     private fun refresh(query: String = _state.value.query) = search(query)
 
+    companion object {
+        /** 复制反馈文案：与剪贴板 30 秒自动清理（FR-4）保持一致，别让用户以为粘不出来。 */
+        const val COPY_FEEDBACK = "已复制，30 秒后自动清除"
+    }
 }

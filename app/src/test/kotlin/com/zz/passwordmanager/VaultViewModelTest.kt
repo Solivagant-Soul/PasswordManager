@@ -20,6 +20,7 @@ import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 import com.zz.passwordmanager.domain.preferences.UserPreferences
 import com.zz.passwordmanager.domain.security.SecurityScanner
+import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
 import com.zz.passwordmanager.ui.UnlockFormData
@@ -27,7 +28,9 @@ import com.zz.passwordmanager.ui.VaultViewModel
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
@@ -260,7 +263,7 @@ class VaultViewModelTest {
             clipboard, sessionManager, status,
         )
         dispatcher.scheduler.advanceUntilIdle()
-        assertEquals(AutoLockDuration.S30, viewModel.autoLockDuration)
+        assertEquals(AutoLockDuration.S30, viewModel.state.first().autoLockDuration)
 
         unlockSuccessfully()
         // 20 秒 < 30 秒档位 → 不应锁定（若仍按写死的 1 分钟，这也是「不锁」，故再测反向）
@@ -400,6 +403,64 @@ class VaultViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertEquals("mail", viewModel.state.first().query)
+    }
+
+    /** v2.1/F1：档位是 UI 可观察状态，设置页点一下就能重组（此前是普通 var，点不动）。 */
+    @Test
+    fun `setting auto lock duration writes through to observable state (F1)`() = runTest(dispatcher) {
+        every { preferences.autoLockDuration } returns flowOf(AutoLockDuration.S30)
+        // setUp 建的是 M1 那份流；换成 S30 后重建，才能断言「状态由流驱动」而非由 setter 实参驱动
+        viewModel = VaultViewModel(
+            unlockVault, initializeVault, destroyVault, resetVault,
+            changeMasterPassword, readSecurityQuestions,
+            unlockWithBiometric, biometricToggle, gate,
+            repository, categoryRepository, securityScanner, preferences,
+            clipboard, sessionManager, status,
+        )
+        coEvery { preferences.setAutoLockDuration(any()) } just runs
+        viewModel.setAutoLockDuration(AutoLockDuration.IMMEDIATE)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AutoLockDuration.S30, viewModel.state.first().autoLockDuration) // 流回写的那份
+    }
+
+    /** v2.1/F3：收藏后必须重载详情，否则详情页星标永远停在旧值。 */
+    @Test
+    fun `toggling favorite reloads the detail so the star flips (F3)`() = runTest(dispatcher) {
+        // EntryDetail 的必填字段：id/title/username/url/notes/categoryId/tags/totpEnabled/createdAt/updatedAt
+        // （favorite 与 type 有默认值，此处显式给出以表明测试意图）
+        val detail = EntryDetail(
+            id = "e1",
+            title = "GitHub",
+            username = "u",
+            url = null,
+            notes = null,
+            categoryId = null,
+            tags = emptyList(),
+            totpEnabled = false,
+            favorite = false,
+            createdAt = 0L,
+            updatedAt = 0L,
+        )
+        coEvery { repository.get("e1") } returns detail
+        coEvery { repository.setFavorite("e1", true) } returns Result.success(Unit)
+
+        viewModel.loadDetail("e1")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.detailFor("e1")!!.favorite)
+
+        viewModel.toggleFavorite("e1", true)
+        dispatcher.scheduler.advanceUntilIdle()
+        coVerify(atLeast = 2) { repository.get("e1") }
+    }
+
+    /** v2.1/F4：复制要有可见反馈，否则用户不知道到底复制成功没有。 */
+    @Test
+    fun `copying a password reports success in state (F4)`() = runTest(dispatcher) {
+        coEvery { repository.revealPassword("e1") } returns Result.success("s3cret".toCharArray())
+
+        viewModel.copyPassword("e1")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(VaultViewModel.COPY_FEEDBACK, viewModel.state.first().successMessage)
     }
 
     private suspend fun unlockSuccessfully() {
