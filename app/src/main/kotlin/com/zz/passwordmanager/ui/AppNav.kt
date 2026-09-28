@@ -154,7 +154,6 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onSelectFavorites = viewModel::filterByFavoritesOnly,
                 onOpen = { backStack.add(Screen.Detail(it)) },
                 onCreate = { backStack.add(Screen.Edit(null)) },
-                onSettings = { currentTab = AppTab.SETTINGS },
                 onLock = viewModel::lock,
             )
 
