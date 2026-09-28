@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.domain.password.GeneratorOptions
 import com.zz.passwordmanager.domain.password.PasswordGenerator
 import com.zz.passwordmanager.domain.password.PasswordStrength
+import com.zz.passwordmanager.ui.components.CardSurface
 import com.zz.passwordmanager.ui.components.PageHeader
 
 /**
@@ -81,65 +82,73 @@ fun GeneratorScreen(
         PageHeader(title = "密码生成器")
         Spacer(Modifier.height(12.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .padding(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
+        // 设计稿把「结果 + 强度 + 长度 + 字符集开关」画成**一整块**浮在淡紫底上的
+        // 白卡（不是四张散卡）。故整块包进一个 CardSurface，而不是只给结果框上色。
+        CardSurface {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = password.ifEmpty { "—" },
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            val level = remember(password) { PasswordStrength.evaluate(password) }
+            Spacer(Modifier.height(12.dp))
+            LinearProgressIndicator(progress = { level.fraction }, modifier = Modifier.fillMaxWidth())
             Text(
-                text = password.ifEmpty { "—" },
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                textAlign = TextAlign.Center,
+                text = "强度：${level.label}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
-        }
 
-        val level = remember(password) { PasswordStrength.evaluate(password) }
-        Spacer(Modifier.height(12.dp))
-        LinearProgressIndicator(progress = { level.fraction }, modifier = Modifier.fillMaxWidth())
-        Text(
-            text = "强度：${level.label}",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        )
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("长度", modifier = Modifier.weight(1f))
+                Text(
+                    "$length",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Slider(
+                value = length.toFloat(),
+                onValueChange = { length = it.toInt() },
+                valueRange = PasswordGenerator.LENGTH_MIN.toFloat()..PasswordGenerator.LENGTH_MAX.toFloat(),
+                steps = PasswordGenerator.LENGTH_MAX - PasswordGenerator.LENGTH_MIN - 1,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("长度", modifier = Modifier.weight(1f))
-            Text("$length", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        }
-        Slider(
-            value = length.toFloat(),
-            onValueChange = { length = it.toInt() },
-            valueRange = PasswordGenerator.LENGTH_MIN.toFloat()..PasswordGenerator.LENGTH_MAX.toFloat(),
-            steps = PasswordGenerator.LENGTH_MAX - PasswordGenerator.LENGTH_MIN - 1,
-            modifier = Modifier.fillMaxWidth(),
-        )
+            CharSetToggle("大写字母 A-Z", checked = options.useUpper) {
+                onOptionsChange(options.copy(useUpper = it))
+            }
+            CharSetToggle("小写字母 a-z", checked = options.useLower) {
+                onOptionsChange(options.copy(useLower = it))
+            }
+            CharSetToggle("数字 0-9", checked = options.useDigit) {
+                onOptionsChange(options.copy(useDigit = it))
+            }
+            CharSetToggle("符号 !@#\$%^&*", checked = options.useSymbol) {
+                onOptionsChange(options.copy(useSymbol = it))
+            }
+            CharSetToggle("排除易混淆字符", checked = options.excludeAmbiguous) {
+                onOptionsChange(options.copy(excludeAmbiguous = it))
+            }
 
-        CharSetToggle("大写字母 A-Z", checked = options.useUpper) {
-            onOptionsChange(options.copy(useUpper = it))
+            error?.let {
+                Text(text = it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
+            }
         }
-        CharSetToggle("小写字母 a-z", checked = options.useLower) {
-            onOptionsChange(options.copy(useLower = it))
-        }
-        CharSetToggle("数字 0-9", checked = options.useDigit) {
-            onOptionsChange(options.copy(useDigit = it))
-        }
-        CharSetToggle("符号 !@#\$%^&*", checked = options.useSymbol) {
-            onOptionsChange(options.copy(useSymbol = it))
-        }
-        CharSetToggle("排除易混淆字符", checked = options.excludeAmbiguous) {
-            onOptionsChange(options.copy(excludeAmbiguous = it))
-        }
-
-        error?.let {
-            Text(text = it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp))
-        }
-
         Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),

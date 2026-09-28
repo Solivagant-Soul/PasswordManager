@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
 import com.zz.passwordmanager.domain.password.GeneratorOptions
+import com.zz.passwordmanager.domain.password.PasswordGenerator
 import com.zz.passwordmanager.domain.preferences.UserPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -68,7 +69,11 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
     }
 
     override suspend fun setDefaultPasswordLength(length: Int) {
-        store.edit { it[KEY_DEFAULT_LENGTH] = length.coerceIn(MIN_LENGTH, MAX_LENGTH) }
+        // 上下界直接引领域层常量，不在此复述：复述出来的字面量只靠注释与
+        // PasswordGenerator 保持一致，改一侧只会静默失配，生成器页再夹断一次。
+        store.edit {
+            it[KEY_DEFAULT_LENGTH] = length.coerceIn(PasswordGenerator.LENGTH_MIN, PasswordGenerator.LENGTH_MAX)
+        }
     }
 
     private companion object {
@@ -81,8 +86,5 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
         val KEY_EXCLUDE_AMBIGUOUS = booleanPreferencesKey("gen_exclude_ambiguous")
         val DEFAULT_AUTO_LOCK = AutoLockDuration.M1
         const val DEFAULT_LENGTH = 16
-        const val MIN_LENGTH = 4
-        // 与 PasswordGenerator.LENGTH_MAX 对齐：否则用户能存进 33，打开生成器页却被夹断
-        const val MAX_LENGTH = 32
     }
 }

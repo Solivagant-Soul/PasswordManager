@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -33,8 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.R
+import com.zz.passwordmanager.domain.entries.Category
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.ui.components.Avatar
 import com.zz.passwordmanager.ui.components.CardSurface
@@ -49,6 +53,7 @@ import com.zz.passwordmanager.ui.components.TopBar
 @Composable
 fun EntryDetailScreen(
     detail: EntryDetail?,
+    categories: List<Category>,
     revealed: String?,
     errorMessage: String?,
     onReveal: () -> Unit,
@@ -70,7 +75,14 @@ fun EntryDetailScreen(
     // 为此在 AppNav 里加一条回调纯属把导航层和 UI 细节焊死。
     val uriHandler = LocalUriHandler.current
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    // 备注上限 2000 字、网址 2048 字，加上固定的 TOTP/标签/底部动作区，
+    // 不滚动的话底部「收藏」按钮直接被推出屏幕，点了没法用。
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+    ) {
         TopBar(
             title = "条目详情",
             onBack = onBack,
@@ -107,9 +119,13 @@ fun EntryDetailScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
-            detail.categoryId?.let {
+            // categoryId 是 UUID，直接印出来用户看到的是一串十六进制。
+            // 查不到名字（分类已被删除、或历史数据里的孤儿 id）时整行不显示，
+            // 留一个空的「分类」标签反而像出了 bug。
+            val categoryName = detail.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
+            if (categoryName != null) {
                 Text(
-                    text = "分类 $it",
+                    text = categoryName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -183,6 +199,7 @@ fun EntryDetailScreen(
                 Text(if (detail.favorite) "已收藏" else "收藏")
             }
         }
+        Spacer(Modifier.height(16.dp))
     }
 
     if (showDeleteConfirm) {
@@ -240,6 +257,10 @@ private fun DetailField(
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                // 备注可到 2000 字、网址到 2048 字。不限行数的话单条超长值会
+                // 把整张卡片撑到屏幕外；截断 + 省略号保证页面结构不被单个字段破坏。
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         onToggleVisibility?.let { toggle ->

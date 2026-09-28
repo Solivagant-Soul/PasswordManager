@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.zz.passwordmanager.ui.components.CardSurface
 import com.zz.passwordmanager.ui.components.PageHeader
 import com.zz.passwordmanager.ui.components.SectionHeader
 import com.zz.passwordmanager.ui.components.StatCard
@@ -95,7 +96,11 @@ fun SecurityCenterScreen(
 
         SectionHeader("需要处理")
 
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        // 卡与卡之间留缝：CardSurface 自身无外边距，紧贴会糊成一块
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(report.weakEntryIds, key = { "weak-$it" }) { id ->
                 IssueRow(Icons.Default.Warning, "该密码强度弱，建议 16 位以上", id, onOpenEntry)
             }
@@ -121,16 +126,22 @@ fun SecurityCenterScreen(
 
 @Composable
 private fun IssueRow(icon: ImageVector, text: String, entryId: String, onOpenEntry: (String) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // 纯装饰：状态文字已说明含义，重复报读只会让 TalkBack 念两遍
-        Icon(imageVector = icon, contentDescription = null)
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(text, style = MaterialTheme.typography.bodyMedium)
+    // 设计稿里每条问题都是独立白卡（图标 + 文案 + 「去修改」），与其余页的
+    // CardSurface 同壳；裸 Row 贴在淡紫底上会和上方统计卡不像同一套语言。
+    CardSurface {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 纯装饰：状态文字已说明含义，重复报读只会让 TalkBack 念两遍
+            Icon(imageVector = icon, contentDescription = null)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+            )
+            TextButton(onClick = { onOpenEntry(entryId) }) { Text("去修改") }
         }
-        TextButton(onClick = { onOpenEntry(entryId) }) { Text("去修改") }
     }
 }
 

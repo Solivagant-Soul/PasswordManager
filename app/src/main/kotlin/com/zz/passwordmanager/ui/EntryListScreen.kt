@@ -108,7 +108,8 @@ fun EntryListScreen(
             if (state.entries.isEmpty()) {
                 EmptyHint(state)
             } else {
-                LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
+                // 96 > FAB 56 + 上下各 16 留白：末行滚到底时正好露出 FAB 上沿，不被压住
+                LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
                     items(state.entries, key = { it.id }) { entry ->
                         EntryRow(
                             entry = entry,
@@ -119,7 +120,10 @@ fun EntryListScreen(
             }
             FloatingActionButton(
                 onClick = onCreate,
-                modifier = Modifier.align(Alignment.BottomEnd),
+                // 16.dp 边距：贴边时 FAB 压住内容框边缘，视觉上不像「浮」在列表之上
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp),
                 containerColor = MaterialTheme.colorScheme.primary,
             ) {
                 Icon(

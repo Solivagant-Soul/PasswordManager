@@ -249,6 +249,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 val detailState = rememberDetailState(top.entryId, viewModel)
                 EntryDetailScreen(
                     detail = detailState,
+                    categories = state.categories,
                     revealed = state.revealed[top.entryId],
                     errorMessage = state.errorMessage,
                     onReveal = { viewModel.reveal(top.entryId) },
