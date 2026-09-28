@@ -22,9 +22,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zz.passwordmanager.AppApplication
+import com.zz.passwordmanager.R
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.platform.biometric.BiometricDiagnostics
 import kotlinx.coroutines.launch
@@ -48,11 +50,11 @@ sealed interface Screen {
 }
 
 /** 底部四个一级页（设计稿 v0.8）。切 Tab 不清各自栈，切回时恢复原位置。 */
-enum class AppTab(val label: String, val icon: String) {
-    PASSWORDS("密码", "🔑"),
-    GENERATOR("生成", "🎲"),
-    SECURITY("安全", "🛡"),
-    SETTINGS("设置", "⚙"),
+enum class AppTab(val label: String, val iconRes: Int) {
+    PASSWORDS("密码", R.drawable.ic_key),
+    GENERATOR("生成", R.drawable.ic_casino),
+    SECURITY("安全", R.drawable.ic_shield),
+    SETTINGS("设置", R.drawable.ic_settings),
 }
 
 @Composable
@@ -121,7 +123,14 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                         NavigationBarItem(
                             selected = currentTab == tab,
                             onClick = { currentTab = tab },
-                            icon = { Text(tab.icon) },
+                            // 自绘 drawable 内部带 ?attr/colorControlNormal，
+                            // 必须走 Icon（SrcIn 覆写为主题色）而不是 Image
+                            icon = {
+                                Icon(
+                                    painter = painterResource(tab.iconRes),
+                                    contentDescription = tab.label,
+                                )
+                            },
                             label = { Text(tab.label) },
                         )
                     }

@@ -11,7 +11,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.zz.passwordmanager.ui.components.PageHeader
 import com.zz.passwordmanager.ui.components.SectionHeader
@@ -91,18 +97,18 @@ fun SecurityCenterScreen(
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(report.weakEntryIds, key = { "weak-$it" }) { id ->
-                IssueRow("⚠", "该密码强度弱，建议 16 位以上", id, onOpenEntry)
+                IssueRow(Icons.Default.Warning, "该密码强度弱，建议 16 位以上", id, onOpenEntry)
             }
             items(report.duplicateGroups, key = { it.joinToString("-") }) { group ->
                 IssueRow(
-                    icon = "🔁",
+                    icon = Icons.Default.Refresh,
                     text = "与另外 ${group.size - 1} 个条目重复使用",
                     entryId = group.first(),
                     onOpenEntry = onOpenEntry,
                 )
             }
             items(report.staleEntryIds, key = { "stale-$it" }) { id ->
-                IssueRow("🕰", "超过 180 天未更新", id, onOpenEntry)
+                IssueRow(Icons.Default.DateRange, "超过 180 天未更新", id, onOpenEntry)
             }
             if (report.actionableCount == 0) {
                 item { Text("没有需要处理的条目", modifier = Modifier.padding(16.dp)) }
@@ -114,12 +120,13 @@ fun SecurityCenterScreen(
 }
 
 @Composable
-private fun IssueRow(icon: String, text: String, entryId: String, onOpenEntry: (String) -> Unit) {
+private fun IssueRow(icon: ImageVector, text: String, entryId: String, onOpenEntry: (String) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(icon)
+        // 纯装饰：状态文字已说明含义，重复报读只会让 TalkBack 念两遍
+        Icon(imageVector = icon, contentDescription = null)
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
         }
