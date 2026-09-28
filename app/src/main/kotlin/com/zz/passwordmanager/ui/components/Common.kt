@@ -89,7 +89,10 @@ fun CardSurface(modifier: Modifier = Modifier, content: @Composable ColumnScope.
         // 设计稿的卡片靠底色差分层、不靠投影，故默认零高度。
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(modifier = Modifier.padding(vertical = 4.dp), content = content)
+        // 水平内边距放在壳里而非各调用方：直接用 CardSurface 的页面（生成器）
+        // 否则每个元素都会贴到卡片左右边缘。已在内容里自带水平内边距的调用方
+        // 需自行去掉那一份，避免叠加。
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), content = content)
     }
 }
 
