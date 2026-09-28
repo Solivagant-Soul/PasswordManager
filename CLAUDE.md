@@ -7,9 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 需求/设计阶段已完成，代码阶段进行中：Android 工程位于仓库根目录，`DesignDocument/` 为设计文档目录。
 
 - 技术栈、数据模型与任务拆解见 `DesignDocument/技术方案.md`（任务列表在 §8，里程碑与批次划分见 §9）。
-- **当前进度：M0–M2 + v1 成品冲刺已完成（T01–T19，代码已交付）**。v1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
-- **下一批：V2 功能增强（T32–T47，尚未开工）**——基于设计稿截图的新增需求：分类/收藏/条目类型、安全中心、生成器强度、四标签导航、设置项。技术设计见 `技术方案.md` §10，处置依据见 `DesignDocument/功能点提取与处置清单.md`。
-- **已知待修缺口**（V2 任务中处理）：列表非响应式（`search()` 用 `.first()`，跨页面变更需手动刷新）；**全项目无 `BackHandler`，详情页按返回键直接退出 App**。
+- **当前进度：M0–M2 + V1 成品冲刺（T01–T19）+ V2 功能增强（T32–T47）+ V2.1 UI 重做（T48–T57）均已交付（代码已入库）**。
+  - V1 = 补齐 :app 侧接线（FR-8 自动锁定、FR-12 密保找回、P-07 改主密码、FR-2 生物识别）+ 生成器 + 自用签名 APK，见 §9.3。
+  - V2 = 设计稿截图的新增需求：分类/收藏/条目类型、安全中心、生成器强度、四标签导航、设置项。技术设计见 `技术方案.md` §10，处置依据见 `DesignDocument/功能点提取与处置清单.md`。
+  - V2.1 = 依据 `DesignDocument/V2.1-UI重做设计.md` 的 UI 重做：删除 FR-15 条目类型（编辑页与列表统一用分类）、生成器长度上界收窄为 32、设置页拆为主页 + 五个子页、编辑页生成改零弹窗直填、UI 换为自建主题 + 公共组件包。
+- **⚠️ V2.1 尚未完成装机验收**：`:app` 无 `src/androidTest`，六屏 UI 重做**无 Compose UI 测试覆盖**；`V2.1-UI重做设计.md` §8 的 14 条走查清单目前只完成 1 条（F2 设置页可滚到底）。详见 `技术方案.md` §11 交付验证声明——**不要仅凭「编译通过」就认为 UI 改动已验收**。
+- **已知待修缺口：无**。此前记载的「列表非响应式（`search()` 用 `.first()`）」「全项目无 `BackHandler`」两条均为 v0.9 时期的历史描述，**与代码不符**，勿再照抄：
+  - 列表响应式：`EntryRepositoryImpl.search` 早已返回 `Flow`，底层走 Room `observe()` / `observeByTag()`，`VaultViewModel.applyFilters()` 在 `collect`（`Daos.kt` 的注释「此前 VM 用 `search(...).first()` 一次性取值」就是这段历史的记录）。全仓生产代码中唯一的 `.first()` 在 `DefaultSecurityScanner.kt`（一次性安全扫描，此处正确）与 `EntryType.kt`（字符串处理）。
+  - 返回键栈：`AppNav.kt` 有 `BackHandler(enabled = backStack.size > 1)`（T49 引入）。
+  - 剩余的「待办」性质事项记录在 `技术方案.md` §11 与 `V2.1-UI重做设计.md` §10，不在 CLAUDE.md 维护。
 - **交付形态：个人自用 APK**（不上应用商店，故无隐私政策与商店合规）。自签证书已生成于**仓库外** `F:/Python_file/ai_coding/tools/keystore/`（`vault-release.jks` + `credentials.properties`），出包命令见下方「构建与验证命令」。证书口令**不入库、不外传**；丢了它就无法再给本 App 出可覆盖升级的包，只能卸载重装。
 - 环境基线：JDK 17；minSdk 26 / compileSdk 35 / AGP 8.7.3 / Gradle 8.10.2；Android SDK 位于 `F:/Python_file/ai_coding/tools/android-sdk`（经 `local.properties` 指向，不入库）。
 - 网络约定：依赖解析走阿里云镜像（`settings.gradle.kts`），wrapper 下载源为腾讯镜像（`gradle-wrapper.properties`）——本机网络对 maven.google.com 与 services.gradle.org 大文件下载不可达。
@@ -46,11 +52,12 @@ set -a; . <(grep -v '^#' "F:/Python_file/ai_coding/tools/keystore/credentials.pr
 
 ## 权威文档（唯一事实来源）
 
-- `DesignDocument/密码管理App_需求规格说明书.md`（当前 v0.7）—— 产品需求的唯一规范，开发与验收均以此为准。
+- `DesignDocument/密码管理App_需求规格说明书.md`（§14 变更记录当前至 v0.11；文首「文档版本」字段未同步维护）—— 产品需求的唯一规范，开发与验收均以此为准。
 - `DesignDocument/features/*.feature` —— Gherkin 验收用例（对应 FR-1 ~ FR-12，覆盖正向/负向/异常/边界）。
 - `DesignDocument/openapi.yaml` —— 未来后端预留 OpenAPI 3.0 契约（当前纯本地、无服务端，仅作预留设计）。
 - `DesignDocument/架构视图.md` —— Mermaid 架构视图（系统上下文图、组件图、解锁与找回流程图）。
-- `DesignDocument/技术方案.md`（含 §9 批次划分与 §9.3 v1 交付记录）—— 技术选型、分层架构、数据模型、内部接口、任务拆解、风险与架构决策记录。
+- `DesignDocument/技术方案.md`（含 §9 批次划分与 §9.3 v1 交付记录、§11 V2.1 交付记录与验证边界）—— 技术选型、分层架构、数据模型、内部接口、任务拆解、风险与架构决策记录。
+- `DesignDocument/V2.1-UI重做设计.md` —— V2.1 UI 重做的产品决策、视觉体系、各页改造与 §8 装机走查清单、§10 实施实况风险表。
 - `DesignDocument/技术方案评审意见.md` —— 技术方案评审记录（含 B1/S1/S2/S3 等问题的处置）。
 - `DesignDocument/M1安全评审报告.md` —— M1 安全评审门禁（S-1 已修复；G-A~G-G 遗留项）。
 - `DesignDocument/遗留项与决策记录.md` —— 各里程碑遗留问题的处置状态与归属里程碑（含推迟理由）。
