@@ -26,12 +26,12 @@ import com.zz.passwordmanager.domain.entries.EntrySummary
 /**
  * 条目行：头像 + 标题 + 收藏星标 + 副标题 + 右箭头。
  *
- * [onToggleFavorite] 当前无调用点——设计稿的星标不可点，收藏在详情页切换。
- * 保留参数是为了让列表行与详情页共用同一份「有收藏就显示星标」的规则；星标
- * 刻意做成纯展示，若日后改为可点，需与整行的 onClick 分开以免吞掉跳转事件。
+ * 收藏星标是**纯展示、不可点**：设计稿的列表页里星标只标记状态，切换收藏在
+ * 详情页做，整行的 [onClick] 唯一通向详情。故本组件不提供收藏回调——留一个
+ * 只能传空 lambda 的形参，会诱使调用方接上真回调，与整行点击抢事件。
  */
 @Composable
-fun EntryRow(entry: EntrySummary, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
+fun EntryRow(entry: EntrySummary, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),

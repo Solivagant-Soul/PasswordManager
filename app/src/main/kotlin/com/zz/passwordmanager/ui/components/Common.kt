@@ -56,23 +56,26 @@ fun PageHeader(
     }
 }
 
-/** 返回键 + 标题 + 可选右侧动作（设计稿「新建条目 / 保存」形态）。 */
+/**
+ * 返回键 + 居中标题 + 可选右侧动作（设计稿「新建条目 / 保存」形态）。
+ *
+ * 三者用 [Box] 叠放而非 [Row] 并排：并排时 `weight(1f)` 只能让标题占满剩余
+ * 空间，文本自身仍左对齐，且右侧有无动作时居中位置会漂移。叠放 + `align`
+ * 才能让标题真正居中，右侧动作宽度变化也不影响它。
+ */
 @Composable
 fun TopBar(title: String, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack) {
-            // 用 AutoMirrored 版：RTL 布局下普通 ArrowBack 不会跟着镜像。
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-        }
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.align(Alignment.Center),
         )
-        action?.invoke()
+        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+            // 用 AutoMirrored 版：RTL 布局下普通 ArrowBack 不会跟着镜像。
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+        }
+        action?.let { Box(modifier = Modifier.align(Alignment.CenterEnd)) { it() } }
     }
 }
 
