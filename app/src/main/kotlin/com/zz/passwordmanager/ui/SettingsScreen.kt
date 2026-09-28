@@ -1,262 +1,172 @@
 package com.zz.passwordmanager.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.zz.passwordmanager.R
 import com.zz.passwordmanager.domain.autolock.AutoLockDuration
+import com.zz.passwordmanager.domain.entries.Category
+import com.zz.passwordmanager.ui.components.PageHeader
+import com.zz.passwordmanager.ui.components.SettingRow
 
 /**
- * 设置屏（v1 最小集）：P-07 修改主密码 + 主动锁定。
- * 生物识别开关在此屏（V1-4 接入）。
+ * 设置主页（v2.1/§4.1）：纯设置项列表，每项点进独立子页。
+ *
+ * 主页必须可滚动——v1 把所有设置塞进一个 `fillMaxSize` 的 Column，内容超出屏幕后
+ * 底部的「锁定应用」直接被挤出可视区且无从滚动（F2）。子页内容长度不定，同样按需滚动。
+ *
+ * 二期占位项（导入/导出）置灰，点按只给提示。
  */
 @Composable
 fun SettingsScreen(
-    errorMessage: String?,
-    successMessage: String?,
     biometricEnabled: Boolean,
-    categories: List<com.zz.passwordmanager.domain.entries.Category>,
+    categories: List<Category>,
     autoLockDuration: AutoLockDuration,
     defaultPasswordLength: Int,
     appVersionName: String,
-    onRunBiometricDiagnostics: () -> String,
-    onSetAutoLockDuration: (AutoLockDuration) -> Unit,
-    onSetDefaultPasswordLength: (Int) -> Unit,
+    errorMessage: String?,
+    successMessage: String?,
+    onOpenAutoLock: () -> Unit,
+    onOpenBiometric: () -> Unit,
+    onOpenDefaultLength: () -> Unit,
+    onOpenCategories: () -> Unit,
+    onOpenChangePassword: () -> Unit,
     onOpenAbout: () -> Unit,
-    onChangeMasterPassword: (current: String, new: String, confirm: String) -> Unit,
-    onBiometricToggle: (enable: Boolean, masterPassword: String) -> Unit,
-    onUpsertCategory: (String?, String) -> Unit,
-    onDeleteCategory: (String) -> Unit,
-    onBack: () -> Unit,
+    onLock: () -> Unit,
+    onComingSoon: (String) -> Unit,
 ) {
-    var current by remember { mutableStateOf("") }
-    var new by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var showBiometricPasswordPrompt by remember { mutableStateOf<Boolean?>(null) }
-    var diagnosticReport by remember { mutableStateOf<String?>(null) }
-    var newCategory by remember { mutableStateOf("") }
-    var editingCategoryId by remember { mutableStateOf<String?>(null) }
-
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
     ) {
-        TextButton(onClick = onBack) { Text("← 返回") }
-        Text("设置", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(16.dp))
+        PageHeader(title = "设置")
+        Spacer(Modifier.height(12.dp))
 
-        Text("修改主密码", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = current,
-            onValueChange = { current = it },
-            label = { Text("当前主密码") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = new,
-            onValueChange = { new = it },
-            label = { Text("新主密码（≥8 位，两类字符）") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = confirm,
-            onValueChange = { confirm = it },
-            label = { Text("确认新主密码") },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // 第一组：解锁与偏好
+        SettingsGroup {
+            SettingRow(
+                title = "生物识别解锁",
+                value = if (biometricEnabled) "已开启" else "已关闭",
+                icon = { SettingIcon(R.drawable.ic_fingerprint) },
+                onClick = onOpenBiometric,
+            )
+            SettingRow(
+                title = "自动锁定",
+                value = autoLockDuration.displayLabel,
+                icon = { VectorSettingIcon(Icons.Default.Lock) },
+                onClick = onOpenAutoLock,
+            )
+            SettingRow(
+                title = "默认密码长度",
+                value = "$defaultPasswordLength",
+                icon = { SettingIcon(R.drawable.ic_key) },
+                onClick = onOpenDefaultLength,
+            )
+        }
+
+        // 第二组：内容组织
+        SettingsGroup {
+            SettingRow(
+                title = "分类管理",
+                value = "${categories.size} 个",
+                icon = { SettingIcon(R.drawable.ic_folder) },
+                onClick = onOpenCategories,
+            )
+            SettingRow(
+                title = "修改主密码",
+                icon = { SettingIcon(R.drawable.ic_lock_reset) },
+                onClick = onOpenChangePassword,
+            )
+            SettingRow(
+                title = "导入 / 导出",
+                value = "即将推出",
+                icon = { SettingIcon(R.drawable.ic_import) },
+                enabled = false,
+                onClick = { onComingSoon("导入 / 导出将在后续版本提供") },
+            )
+        }
+
+        // 第三组：关于
+        SettingsGroup {
+            SettingRow(
+                title = "关于",
+                value = "v$appVersionName",
+                icon = { VectorSettingIcon(Icons.Default.Info) },
+                onClick = onOpenAbout,
+            )
+        }
+
+        TextButton(
+            onClick = onLock,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        ) {
+            Text("锁定应用", color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+        }
 
         errorMessage?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(text = it, color = MaterialTheme.colorScheme.error)
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         successMessage?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(text = it, color = MaterialTheme.colorScheme.primary)
+            Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
         }
-
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = {
-                onChangeMasterPassword(current, new, confirm)
-                current = ""; new = ""; confirm = ""
-            },
-            enabled = current.isNotEmpty() && new.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("修改主密码")
-        }
-
-        // ---- FR-2 生物识别快捷解锁开关（P-03：须验主密码） ----
-        Spacer(Modifier.height(24.dp))
-        Text("生物识别解锁", style = MaterialTheme.typography.titleMedium)
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                if (biometricEnabled) "已开启：可用指纹/面容快速解锁" else "未开启：每次都需输入主密码",
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = biometricEnabled,
-                onCheckedChange = { showBiometricPasswordPrompt = it },
-            )
-        }
-        // 排障入口：开关切不过去时，先看诊断结论再决定是否需要兼容模式
-        TextButton(
-            onClick = { diagnosticReport = onRunBiometricDiagnostics() },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("生物识别诊断") }
-
-        // ---- 自动锁定档位（T40/FR-16）----
-        Spacer(Modifier.height(24.dp))
-        Text("自动锁定", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            AutoLockDuration.entries.forEach { duration ->
-                FilterChip(
-                    selected = autoLockDuration == duration,
-                    onClick = { onSetAutoLockDuration(duration) },
-                    label = { Text(duration.label) },
-                )
-            }
-        }
-        Text(
-            "切到后台超过该时长后自动锁定",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        // ---- 默认密码长度（T41/FR-16）----
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("默认密码长度", modifier = Modifier.weight(1f))
-            TextButton(onClick = { onSetDefaultPasswordLength(defaultPasswordLength - 4) }) { Text("−") }
-            Text("$defaultPasswordLength", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = { onSetDefaultPasswordLength(defaultPasswordLength + 4) }) { Text("＋") }
-        }
-
-        // ---- 关于（T46）----
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("关于", modifier = Modifier.weight(1f))
-            TextButton(onClick = onOpenAbout) { Text("v$appVersionName ›") }
-        }
-
-        // ---- 分类管理（T34/T35）----
-        Spacer(Modifier.height(24.dp))
-        Text("分类", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "分类用于列表筛选（单选），标签用于归类（多选）",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        categories.forEach { category ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                if (editingCategoryId == category.id) {
-                    OutlinedTextField(
-                        value = newCategory,
-                        onValueChange = { newCategory = it },
-                        label = { Text("分类名") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = {
-                        onUpsertCategory(category.id, newCategory)
-                        editingCategoryId = null; newCategory = ""
-                    }) { Text("保存") }
-                    TextButton(onClick = { editingCategoryId = null }) { Text("取消") }
-                } else {
-                    Text(category.name, modifier = Modifier.weight(1f))
-                    TextButton(onClick = {
-                        editingCategoryId = category.id; newCategory = category.name
-                    }) { Text("改名") }
-                    TextButton(onClick = { onDeleteCategory(category.id) }) { Text("删除") }
-                }
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newCategory,
-                onValueChange = { newCategory = it },
-                label = { Text("新分类名（1–30 字）") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(
-                enabled = newCategory.isNotBlank(),
-                onClick = { onUpsertCategory(null, newCategory); newCategory = "" },
-            ) { Text("添加") }
-        }
-    }
-
-    // 诊断结果
-    diagnosticReport?.let { report ->
-        AlertDialog(
-            onDismissRequest = { diagnosticReport = null },
-            title = { Text("生物识别诊断") },
-            text = { Text(report, style = MaterialTheme.typography.bodySmall) },
-            confirmButton = {
-                TextButton(onClick = { diagnosticReport = null }) { Text("知道了") }
-            },
-        )
-    }
-
-    // P-03：开关生物识别须验证当前主密码
-    showBiometricPasswordPrompt?.let { enable ->
-        var password by remember(enable) { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showBiometricPasswordPrompt = null },
-            title = { Text(if (enable) "开启生物识别解锁" else "关闭生物识别解锁") },
-            text = {
-                Column {
-                    Text(if (enable) "请输入当前主密码以确认，随后需验证一次指纹或面容。" else "请输入当前主密码以确认。")
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("当前主密码") },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = password.isNotEmpty(),
-                    onClick = {
-                        onBiometricToggle(enable, password)
-                        showBiometricPasswordPrompt = null
-                    },
-                ) { Text("确认") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBiometricPasswordPrompt = null }) { Text("取消") }
-            },
-        )
     }
 }
 
-private val AutoLockDuration.label: String
-    get() = when (this) {
-        AutoLockDuration.IMMEDIATE -> "立即"
-        AutoLockDuration.S30 -> "30 秒"
-        AutoLockDuration.M1 -> "1 分钟"
-        AutoLockDuration.M5 -> "5 分钟"
+/** 设置项分组卡片：白底圆角卡片壳，行内分隔线由 [SettingRow] 自带。 */
+@Composable
+private fun SettingsGroup(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) { content() }
     }
+}
+
+/**
+ * 设置行图标（自绘 drawable）。必须经 [Icon] + `painterResource` 消费而不能用 `Image`：
+ * 这些 vector 内部带 `android:tint="?attr/colorControlNormal"`，走 `Image` 时该 attr
+ * 直接生效、暗色模式不跟随主题；[Icon] 的 `ColorFilter.tint`（SrcIn）会把它覆写成主题色。
+ */
+@Composable
+private fun SettingIcon(iconRes: Int) {
+    Icon(
+        painter = painterResource(iconRes),
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/** 设置行图标（内置矢量图标）。与 [SettingIcon] 同理，只是来源为 [ImageVector] 而非 drawable。 */
+@Composable
+private fun VectorSettingIcon(icon: ImageVector) {
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+    )
+}
