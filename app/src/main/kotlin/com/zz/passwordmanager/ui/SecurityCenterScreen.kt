@@ -11,18 +11,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.zz.passwordmanager.domain.security.SecurityReport
+import com.zz.passwordmanager.ui.components.PageHeader
+import com.zz.passwordmanager.ui.components.SectionHeader
+import com.zz.passwordmanager.ui.components.StatCard
 
 /**
  * 安全中心（FR-13/T43）。
@@ -38,43 +39,55 @@ fun SecurityCenterScreen(
 ) {
     val report = state.securityReport
 
+    // v2.1/F6：进入本页即自动扫描，无需手点；已有结果时不重复扫。
+    // 守卫 `!state.locked`：扫描器走 `entryRepository.search(...)`，锁定态取不到数据，
+    // 会扫出一份全 0 的假报告。底栏在锁定时本就隐藏，但这里仍自查一层，
+    // 避免将来任何路径把本页暴露给锁定态。
+    LaunchedEffect(state.securityReport) {
+        if (state.securityReport == null && !state.scanning && !state.locked) onScan()
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("安全中心", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            text = report?.let { "上次扫描：${formatTime(it.scannedAtEpochMs)}" } ?: "尚未扫描",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        PageHeader(
+            title = "安全中心",
+            subtitle = report?.let { "上次扫描：${formatTime(it.scannedAtEpochMs)}" } ?: "正在扫描…",
         )
         Spacer(Modifier.height(16.dp))
 
         if (report == null) {
             Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                if (state.scanning) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (state.scanning) {
                         CircularProgressIndicator()
                         Spacer(Modifier.height(12.dp))
                         Text("正在本地扫描…")
+                    } else {
+                        // 扫描失败时 `securityReport` 仍为 null，而上面的 LaunchedEffect
+                        // 以它为 key、值没变 → 不会重跑。必须留手动重试出口，
+                        // 否则用户永久卡在空白页。
+                        Text(
+                            "扫描未完成，请重试",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = onScan) { Text("重试") }
                     }
-                } else {
-                    Button(onClick = onScan) { Text("开始安全检测") }
                 }
             }
             return@Column
         }
 
-        // 统计卡
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            StatCard("总密码数", report.totalCount, Modifier.weight(1f))
-            StatCard("弱密码", report.weakCount, Modifier.weight(1f))
+            StatCard("${report.totalCount}", "总密码数", Color(0xFF5B6ABF), Modifier.weight(1f))
+            StatCard("${report.weakCount}", "弱密码", Color(0xFFE08A2E), Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            StatCard("重复使用", report.duplicateGroups.size, Modifier.weight(1f))
-            StatCard("长期未更新", report.staleCount, Modifier.weight(1f))
+            StatCard("${report.duplicateGroups.size}", "重复使用", Color(0xFF3BA55C), Modifier.weight(1f))
+            StatCard("${report.staleCount}", "长期未更新", Color(0xFFE0575B), Modifier.weight(1f))
         }
 
-        Spacer(Modifier.height(16.dp))
-        Text("需处理（${report.actionableCount}）", style = MaterialTheme.typography.titleMedium)
+        SectionHeader("需要处理")
 
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(report.weakEntryIds, key = { "weak-$it" }) { id ->
@@ -97,22 +110,6 @@ fun SecurityCenterScreen(
         }
 
         TextButton(onClick = onScan, modifier = Modifier.fillMaxWidth()) { Text("重新检测") }
-    }
-}
-
-@Composable
-private fun StatCard(label: String, value: Int, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    ) {
-        Text(
-            text = "$value",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 
