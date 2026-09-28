@@ -1,11 +1,12 @@
 package com.zz.passwordmanager.ui
 
 /*
- * 设置的五个子页（v2.1/§4.1）。与主页 [SettingsScreen] 分文件是为了守住单文件 400 行的上限。
+ * 设置的五个子页（v2.1/§4.1）。与主页 [SettingsScreen] 分文件的原因有二：
+ * 两者合成一份会到 461 行、超过单文件 400 行的上限；且主页（纯设置项列表）与子页
+ * （各自带表单/对话框）是两套关注点，合在一处会互相淹没。
  *
- * 目录名 `settings` 与包名不一致是刻意的：这五个 Composable 在 `AppNav` 中是**无限定引用**
- * （同包直呼），改包名就得同步改导航接线，而接线文件本任务不归我改。Kotlin 按包解析、
- * 不看目录，故同名包放在子目录里既满足「子页独立成文件」又不牵动导航。
+ * 包名与目录保持一致（同在 `com.zz.passwordmanager.ui`）：`AppNav` 对这五个 Composable
+ * 是同包无限定引用，拆文件而非拆包正是为了让导航接线一个字都不用动。
  */
 
 import androidx.compose.foundation.layout.Column
