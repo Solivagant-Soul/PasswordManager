@@ -76,21 +76,23 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
     }
     var currentTab by remember { mutableStateOf(AppTab.PASSWORDS) }
 
-    // v2.1/F4：复制/保存等一次性反馈走 Snackbar，消费后即清。
-    // **仅在已解锁态消费**——锁定时 successMessage 归解锁屏内联渲染
-    // （UnlockScreen.kt 里有同一份 state.successMessage 的 Text），
-    // 「主密码已重置」这条提示恰恰必须在解锁屏留到用户看见；
-    // 若 Snackbar 也消费它，同一条消息会出现两次且被 Snackbar 提前清空。
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
     LaunchedEffect(state.successMessage, state.locked) {
+        // 锁定态不消费：此时 successMessage 归解锁屏内联渲染
+        // （UnlockScreen.kt 里有同一份 state.successMessage 的 Text），
+        // 「主密码已重置」这条提示恰恰必须留到用户看见；
+        // 若 Snackbar 也消费它，同一条消息会出现两次且被提前清空。
+        //
+        // locked 也要进 key：successMessage 是在 locked == true 时被设置的，
+        // 只监听字符串的话，解锁那一刻若有待消费的消息不会重新触发，提示会静默丢失。
         if (state.locked) return@LaunchedEffect
-        state.successMessage?.let { message ->
-            snackbarScope.launch {
-                snackbarHostState.showSnackbar(message)
-                viewModel.dismissSuccess()
-            }
-        }
+        val message = state.successMessage ?: return@LaunchedEffect
+        // 直接 await，不套 snackbarScope.launch：后者属于 rememberCoroutineScope 的 job，
+        // key 变化不会取消它——锁定发生在 Snackbar 展示期间时，
+        // 飞行中的协程仍会把 Snackbar 画到解锁屏上并清掉消息。
+        snackbarHostState.showSnackbar(message)
+        viewModel.dismissSuccess()
     }
     val backStack: SnapshotStateList<Screen> = stacks.getValue(currentTab)
     val top = backStack.last()
