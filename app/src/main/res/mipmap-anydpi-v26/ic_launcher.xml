@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标（API 26+；本项目 minSdk 26，故实际生效的就是这一套）。
+  前景层内容已缩放到 108dp 画布中央 72dp 的安全区内，
+  这样被系统裁成圆形/水滴形时不会切到盾牌与金币。
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
+</adaptive-icon>
