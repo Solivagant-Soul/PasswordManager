@@ -639,6 +639,13 @@ class VaultViewModel @Inject constructor(
         }
     }
 
+    /** 复制非密码字段（用户名等）——同样走 30 秒自动清理并给反馈。 */
+    fun copyPlainText(value: String) {
+        if (value.isEmpty()) return
+        clipboard.copySensitive(value)
+        _state.update { it.copy(successMessage = COPY_FEEDBACK) }
+    }
+
     // ---- 编辑 / 删除（FR-3） ----
 
     fun save(id: String?, input: EntryInput, onSaved: () -> Unit) {

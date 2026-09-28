@@ -245,6 +245,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                     onReveal = { viewModel.reveal(top.entryId) },
                     onHide = { viewModel.hide(top.entryId) },
                     onCopy = { viewModel.copyPassword(top.entryId) },
+                    onCopyUsername = { viewModel.copyPlainText(detailState?.username.orEmpty()) },
                     onDelete = {
                         viewModel.delete(top.entryId)
                         backStack.removeAt(backStack.lastIndex)
