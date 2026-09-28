@@ -76,10 +76,15 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
     }
     var currentTab by remember { mutableStateOf(AppTab.PASSWORDS) }
 
-    // v2.1/F4：复制/保存等一次性反馈走 Snackbar，消费后即清，避免同一条文案反复弹
+    // v2.1/F4：复制/保存等一次性反馈走 Snackbar，消费后即清。
+    // **仅在已解锁态消费**——锁定时 successMessage 归解锁屏内联渲染
+    // （UnlockScreen.kt 里有同一份 state.successMessage 的 Text），
+    // 「主密码已重置」这条提示恰恰必须在解锁屏留到用户看见；
+    // 若 Snackbar 也消费它，同一条消息会出现两次且被 Snackbar 提前清空。
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
-    LaunchedEffect(state.successMessage) {
+    LaunchedEffect(state.successMessage, state.locked) {
+        if (state.locked) return@LaunchedEffect
         state.successMessage?.let { message ->
             snackbarScope.launch {
                 snackbarHostState.showSnackbar(message)
