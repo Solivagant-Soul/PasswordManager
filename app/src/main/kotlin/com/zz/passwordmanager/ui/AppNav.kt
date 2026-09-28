@@ -262,6 +262,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                     existing = existing,
                     categories = state.categories,
                     errorMessage = state.errorMessage,
+                    onGeneratePassword = viewModel::generatePasswordNow,
                     onSave = { input -> viewModel.save(top.entryId, input) { backStack.removeAt(backStack.lastIndex) } },
                     onBack = { backStack.removeAt(backStack.lastIndex) },
                 )

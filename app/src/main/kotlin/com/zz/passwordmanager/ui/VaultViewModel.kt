@@ -30,6 +30,7 @@ import com.zz.passwordmanager.domain.entries.EntryInput
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.entries.EntrySummary
 import com.zz.passwordmanager.domain.password.GeneratorOptions
+import com.zz.passwordmanager.domain.password.PasswordGenerator
 import com.zz.passwordmanager.domain.password.PasswordGenerator.LENGTH_MAX
 import com.zz.passwordmanager.domain.password.PasswordGenerator.LENGTH_MIN
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
@@ -199,6 +200,17 @@ class VaultViewModel @Inject constructor(
 
     fun setGeneratorOptions(options: GeneratorOptions) {
         viewModelScope.launch { preferences.setGeneratorOptions(options) }
+    }
+
+    /**
+     * 按**当前全局生成器选项**直接产出一个密码（v2.1/D4：编辑页零弹窗）。
+     * 字符集全关时返回 null——UI 须给出可见提示，而不是静默无反应。
+     */
+    fun generatePasswordNow(): String? {
+        val options = _state.value.generatorOptions
+        if (options.charSets().isEmpty()) return null
+        return PasswordGenerator.generate(options.rules(_state.value.defaultPasswordLength))
+            .getOrNull()?.concatToString()
     }
 
     // ---- 主动锁定 ----

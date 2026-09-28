@@ -40,6 +40,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -83,11 +84,18 @@ class VaultViewModelTest {
 
     private lateinit var viewModel: VaultViewModel
 
+    /**
+     * 用 StateFlow 而非 `flowOf`：VM 在 init 里已 collect 了这个属性，
+     * 测试中途再 `every { } returns flowOf(...)` 换掉的是「后续调用」的返回值，
+     * 已经收进 collector 的旧流不会重发——改选项类的用例会假绿。
+     */
+    private val generatorOptionsFlow = MutableStateFlow(GeneratorOptions())
+
     @Before
     fun setUp() {
         every { preferences.autoLockDuration } returns flowOf(AutoLockDuration.M1)
         every { preferences.defaultPasswordLength } returns flowOf(16)
-        every { preferences.generatorOptions } returns flowOf(GeneratorOptions())
+        every { preferences.generatorOptions } returns generatorOptionsFlow
         Dispatchers.setMain(dispatcher)
         viewModel = VaultViewModel(
             unlockVault, initializeVault, destroyVault, resetVault,
@@ -563,6 +571,19 @@ class VaultViewModelTest {
         )
         dispatcher.scheduler.advanceUntilIdle()
         assertEquals(32, viewModel.state.first().defaultPasswordLength)
+    }
+
+    /** v2.1/D4：编辑页「⚡生成」走全局选项，字符集全关时返回 null 让 UI 提示。 */
+    @Test
+    fun `generate now uses global options and reports empty char set (D4)`() = runTest(dispatcher) {
+        dispatcher.scheduler.advanceUntilIdle()
+        assertTrue("默认选项应能生成", viewModel.generatePasswordNow()?.isNotBlank() == true)
+
+        val allOff = GeneratorOptions(useUpper = false, useLower = false, useDigit = false, useSymbol = false)
+        generatorOptionsFlow.value = allOff
+        viewModel.setGeneratorOptions(allOff)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertNull("字符集全关时不得生成", viewModel.generatePasswordNow())
     }
 
     private suspend fun unlockSuccessfully() {
