@@ -130,7 +130,7 @@ private fun IssueRow(icon: ImageVector, text: String, entryId: String, onOpenEnt
     // CardSurface 同壳；裸 Row 贴在淡紫底上会和上方统计卡不像同一套语言。
     CardSurface {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 纯装饰：状态文字已说明含义，重复报读只会让 TalkBack 念两遍
