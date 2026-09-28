@@ -33,6 +33,18 @@ private val LightColors = lightColorScheme(
     surfaceVariant = Color(0xFFEDEBF7),
     onSurfaceVariant = Color(0xFF6B7280),
     error = DangerRed,
+    // M3 1.3 新增槽位。不显式赋值会静默回落到 M3 基线紫（outline=#79747E、
+    // surfaceContainer=#F3EDF7），紫色描边落在靛蓝表单上明显偏色。
+    outline = Color(0xFF9CA3AF),
+    outlineVariant = Color(0xFF6B7280),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFDFDFF),
+    surfaceContainer = Color(0xFFF7F6FC),
+    surfaceContainerHigh = Color(0xFFF0EFF8),
+    surfaceContainerHighest = Color(0xFFEAE9F4),
+    /** 不设则 M3 用基线紫做色调叠加，污染卡片与导航栏。 */
+    surfaceTint = Indigo,
+    scrim = Color(0xFF000000),
 )
 
 /** 设计稿只画了亮色，但夜间解锁屏纯黑过于刺眼；暗色按 M3 规范推导而非硬调色。 */
@@ -45,6 +57,16 @@ private val DarkColors = darkColorScheme(
     onSurface = Color(0xFFE5E7EB),
     onSurfaceVariant = Color(0xFF9CA3AF),
     error = Color(0xFFFCA5A5),
+    // 同亮色：M3 1.3 槽位若不赋值会回落基线紫，暗色下 outline 偏紫同样明显。
+    outline = Color(0xFF6B7280),
+    outlineVariant = Color(0xFF4B5563),
+    surfaceContainerLowest = Color(0xFF141319),
+    surfaceContainerLow = Color(0xFF1C1B24),
+    surfaceContainer = Color(0xFF211F2B),
+    surfaceContainerHigh = Color(0xFF2A2833),
+    surfaceContainerHighest = Color(0xFF33313D),
+    surfaceTint = Color(0xFFA5B4FC),
+    scrim = Color(0xFF000000),
 )
 
 /** 成功色不在 M3 ColorScheme 里，安全中心统计卡与弱密码提示需要它。 */
