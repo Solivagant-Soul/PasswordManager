@@ -7,6 +7,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +38,13 @@ sealed interface Screen {
     data object Generator : Screen
     data object Security : Screen
     data object About : Screen
+
+    // 设置子页（v2.1/§4）：只压入 SETTINGS 栈，返回键逐级回退
+    data object SettingAutoLock : Screen
+    data object SettingBiometric : Screen
+    data object SettingDefaultLength : Screen
+    data object SettingCategories : Screen
+    data object SettingChangePassword : Screen
 }
 
 /** 底部四个一级页（设计稿 v0.8）。切 Tab 不清各自栈，切回时恢复原位置。 */
@@ -66,6 +75,18 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
         )
     }
     var currentTab by remember { mutableStateOf(AppTab.PASSWORDS) }
+
+    // v2.1/F4：复制/保存等一次性反馈走 Snackbar，消费后即清，避免同一条文案反复弹
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+    LaunchedEffect(state.successMessage) {
+        state.successMessage?.let { message ->
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(message)
+                viewModel.dismissSuccess()
+            }
+        }
+    }
     val backStack: SnapshotStateList<Screen> = stacks.getValue(currentTab)
     val top = backStack.last()
 
@@ -100,6 +121,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 }
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         // 内边距必须用上，否则内容会被底部导航栏压住（lint UnusedMaterial3ScaffoldPadding）
         Column(Modifier.padding(padding)) {
@@ -131,8 +153,9 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
 
             Screen.Generator -> GeneratorScreen(
                 initialLength = state.defaultPasswordLength,
+                options = state.generatorOptions,
+                onOptionsChange = viewModel::setGeneratorOptions,
                 onCopy = viewModel::copyGeneratedPassword,
-                onBack = { backStack.removeAt(backStack.lastIndex) },
             )
 
             Screen.Security -> SecurityCenterScreen(
@@ -150,27 +173,61 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onBack = { backStack.removeAt(backStack.lastIndex) },
             )
 
-            Screen.Settings -> SettingsScreen(
+            Screen.SettingAutoLock -> AutoLockSettingScreen(
+                current = state.autoLockDuration,
+                onSelect = viewModel::setAutoLockDuration,
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.SettingBiometric -> BiometricSettingScreen(
+                enabled = state.biometricEnabled,
+                onToggle = biometricToggleAction(viewModel),
+                onRunDiagnostics = { BiometricDiagnostics.run(appContext).toText() },
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.SettingDefaultLength -> DefaultLengthSettingScreen(
+                current = state.defaultPasswordLength,
+                onChange = viewModel::setDefaultPasswordLength,
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.SettingCategories -> CategorySettingScreen(
+                categories = state.categories,
+                onUpsert = viewModel::upsertCategory,
+                onDelete = viewModel::deleteCategory,
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.SettingChangePassword -> ChangePasswordScreen(
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
-                biometricEnabled = state.biometricEnabled,
-                categories = state.categories,
-                autoLockDuration = state.autoLockDuration,
-                defaultPasswordLength = state.defaultPasswordLength,
-                appVersionName = versionName,
-                onSetAutoLockDuration = viewModel::setAutoLockDuration,
-                onSetDefaultPasswordLength = viewModel::setDefaultPasswordLength,
-                onOpenAbout = { backStack.add(Screen.About) },
-                onBiometricToggle = biometricToggleAction(viewModel),
-                onUpsertCategory = viewModel::upsertCategory,
-                onDeleteCategory = viewModel::deleteCategory,
-                onRunBiometricDiagnostics = { BiometricDiagnostics.run(appContext).toText() },
-                onChangeMasterPassword = { current, new, confirm ->
+                onChange = { current, new, confirm ->
                     viewModel.submitMasterPasswordChange(current, new, confirm) {
                         backStack.removeAt(backStack.lastIndex)
                     }
                 },
                 onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.Settings -> SettingsScreen(
+                biometricEnabled = state.biometricEnabled,
+                categories = state.categories,
+                autoLockDuration = state.autoLockDuration,
+                defaultPasswordLength = state.defaultPasswordLength,
+                appVersionName = versionName,
+                errorMessage = state.errorMessage,
+                successMessage = state.successMessage,
+                onOpenAutoLock = { backStack.add(Screen.SettingAutoLock) },
+                onOpenBiometric = { backStack.add(Screen.SettingBiometric) },
+                onOpenDefaultLength = { backStack.add(Screen.SettingDefaultLength) },
+                onOpenCategories = { backStack.add(Screen.SettingCategories) },
+                onOpenChangePassword = { backStack.add(Screen.SettingChangePassword) },
+                onOpenAbout = { backStack.add(Screen.About) },
+                onLock = viewModel::lock,
+                onComingSoon = { message ->
+                    snackbarScope.launch { snackbarHostState.showSnackbar(message) }
+                },
             )
 
             is Screen.Detail -> {
