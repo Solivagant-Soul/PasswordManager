@@ -34,8 +34,6 @@ import com.zz.passwordmanager.ui.components.SettingRow
  *
  * 主页必须可滚动——v1 把所有设置塞进一个 `fillMaxSize` 的 Column，内容超出屏幕后
  * 底部的「锁定应用」直接被挤出可视区且无从滚动（F2）。子页内容长度不定，同样按需滚动。
- *
- * 二期占位项（导入/导出）置灰，点按只给提示。
  */
 @Composable
 fun SettingsScreen(
@@ -55,9 +53,9 @@ fun SettingsScreen(
     onOpenDefaultLength: () -> Unit,
     onOpenCategories: () -> Unit,
     onOpenChangePassword: () -> Unit,
+    onOpenBackup: () -> Unit,
     onOpenAbout: () -> Unit,
     onLock: () -> Unit,
-    onComingSoon: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -123,10 +121,8 @@ fun SettingsScreen(
             )
             SettingRow(
                 title = "导入 / 导出",
-                value = "即将推出",
                 icon = { SettingIcon(R.drawable.ic_import) },
-                enabled = false,
-                onClick = { onComingSoon("导入 / 导出将在后续版本提供") },
+                onClick = onOpenBackup,
             )
         }
 

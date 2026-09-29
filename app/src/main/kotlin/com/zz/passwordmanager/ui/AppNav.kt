@@ -50,6 +50,8 @@ sealed interface Screen {
     data object SettingCategories : Screen
     data object SettingChangePassword : Screen
     data object SettingAutofill : Screen
+    /** v1.3.0：FR-7 加密备份导出/导入（此前是设置主页里的置灰占位行）。 */
+    data object SettingBackup : Screen
 }
 
 /**
@@ -101,7 +103,6 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val snackbarScope = rememberCoroutineScope()
     LaunchedEffect(state.successMessage, state.locked) {
         // 锁定态不消费：此时 successMessage 归解锁屏内联渲染
         // （UnlockScreen.kt 里有同一份 state.successMessage 的 Text），
@@ -270,14 +271,16 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onOpenDefaultLength = { backStack.add(Screen.SettingDefaultLength) },
                 onOpenCategories = { backStack.add(Screen.SettingCategories) },
                 onOpenChangePassword = { backStack.add(Screen.SettingChangePassword) },
+                onOpenBackup = { backStack.add(Screen.SettingBackup) },
                 onOpenAbout = { backStack.add(Screen.About) },
                 onLock = viewModel::lock,
-                onComingSoon = { message ->
-                    snackbarScope.launch { snackbarHostState.showSnackbar(message) }
-                },
             )
 
             Screen.SettingAutofill -> AutofillSettingScreen(
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.SettingBackup -> BackupSettingScreen(
                 onBack = { backStack.removeAt(backStack.lastIndex) },
             )
 

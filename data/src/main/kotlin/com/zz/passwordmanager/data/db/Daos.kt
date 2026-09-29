@@ -66,6 +66,22 @@ interface EntryDao {
 
     @Query("SELECT COUNT(*) FROM entries")
     suspend fun countForLimit(): Int
+
+    // ---- 备份导入/导出（FR-7 / T26–T27） ----
+
+    /**
+     * 全量读出**含密文**的实体。这是 `entries` 表唯一一处会拿到 `passwordCipher` 的查询，
+     * 调用方（`RoomBackupVault`）拿到后立刻用 DEK 解密。列表/搜索一律走
+     * [EntryRow] 投影，不碰这一列。
+     */
+    @Query("SELECT * FROM entries")
+    suspend fun allEntities(): List<EntryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entries: List<EntryEntity>)
+
+    @Query("DELETE FROM entries")
+    suspend fun deleteAll()
 }
 
 /** 列表/搜索投影（不含密码密文——列表场景无需解密）。 */
@@ -93,4 +109,16 @@ interface CategoryDao {
 
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    // ---- 备份导入（FR-7） ----
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(categories: List<CategoryEntity>)
+
+    /**
+     * 整库替换时清空分类。与条目同在一个 Room 事务里（`RoomBackupVault.replaceAll`），
+     * 因此不存在「条目已换、分类还没换」的中间态。
+     */
+    @Query("DELETE FROM categories")
+    suspend fun deleteAll()
 }

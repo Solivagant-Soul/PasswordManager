@@ -13,6 +13,7 @@ import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.entries.EntryRepositoryException
 import com.zz.passwordmanager.domain.entries.EntrySummary
 import com.zz.passwordmanager.domain.entries.EntryType
+import com.zz.passwordmanager.domain.entries.EntryValidation
 import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -175,28 +176,14 @@ class EntryRepositoryImpl(
         Result.success(plain.decodeToString().toCharArray()) // plain 字节由 GC 处理（T05 已知局限）
     }
 
-    private fun validate(input: EntryInput): List<EntryIssue> {
-        val issues = mutableListOf<EntryIssue>()
-        val title = input.title.trim()
-        if (title.isEmpty() || title.length > TITLE_MAX) {
-            issues += EntryIssue("title", "length must be 1..$TITLE_MAX")
-        }
-        // v1.1.2：用户名与名称、密码同为必填（此前允许为空）。校验放在仓库层而非
-        // 只靠编辑页——绕过 UI 的调用方（导入链路、未来自动化）同样要吃到这条规则。
-        // message 里带上字段名，是为了让 :app 的 invalidMessage 能把它映射成
-        // 「用户名 / 账号必填」而不是落到兜底文案。
-        if (input.username.isBlank()) {
-            issues += EntryIssue("username", "username must not be empty")
-        }
-        if (input.password.isEmpty()) {
-            issues += EntryIssue("password", "must not be empty")
-        }
-        val url = input.url?.trim().orEmpty()
-        if (url.isNotEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
-            issues += EntryIssue("url", "must start with http:// or https://")
-        }
-        return issues
-    }
+    /**
+     * 校验规则的**唯一**实现在 `EntryValidation`（需求 §6.3）。
+     *
+     * v1.1.2 起校验放在仓库层而非只靠编辑页——绕过 UI 的调用方同样要吃到这条规则。
+     * v1.3.0 又把规则整体搬进 `:domain`，好让备份导入链路复用同一份：
+     * 导入是直接写库的旁路，两处各写一份必然漂移。
+     */
+    private fun validate(input: EntryInput): List<EntryIssue> = EntryValidation.issues(input)
 
     private fun com.zz.passwordmanager.data.db.EntryRow.toSummary() =
         EntrySummary(id, title, username, url, categoryId, favorite, EntryType.from(type))
@@ -207,8 +194,4 @@ class EntryRepositoryImpl(
         favorite = favorite, type = EntryType.from(type),
         createdAt = createdAt, updatedAt = updatedAt,
     )
-
-    private companion object {
-        const val TITLE_MAX = 100
-    }
 }

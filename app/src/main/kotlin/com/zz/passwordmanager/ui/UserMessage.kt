@@ -1,11 +1,17 @@
 package com.zz.passwordmanager.ui
 
+import com.zz.passwordmanager.data.backup.BackupFormatException
+import com.zz.passwordmanager.data.backup.BackupIoException
+import com.zz.passwordmanager.data.backup.BackupKeyException
+import com.zz.passwordmanager.data.backup.InvalidBackupException
 import com.zz.passwordmanager.data.entries.CategoryException
 import com.zz.passwordmanager.data.vault.AuthError
 import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.InitializationError
 import com.zz.passwordmanager.data.vault.InitializationException
 import com.zz.passwordmanager.data.vault.VaultLockedException
+import com.zz.passwordmanager.domain.backup.MalformedBackupException
+import com.zz.passwordmanager.domain.backup.UnsupportedBackupVersionException
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.entries.EntryRepositoryException
 
@@ -94,5 +100,31 @@ private fun invalidMessage(issues: List<String>): String {
 /** 分类相关错误的文案（与条目错误分开，便于 UI 定位到具体表单）。 */
 internal fun categoryMessage(e: Throwable): String = when (e) {
     is CategoryException -> e.issues.firstOrNull()?.message ?: "分类名不符合要求"
+    else -> userMessage(e)
+}
+
+/**
+ * 备份相关错误的文案（FR-7）。
+ *
+ * 与 [userMessage] 分开而不是塞进它的 `when`：备份有一批**只在备份场景下**成立的失败
+ * （认证失败、帧损坏、格式版本不认识），混进通用映射会让那份已经很长的分支表继续膨胀，
+ * 而每一处都只需要在备份子页里读到。
+ *
+ * 两条必须讲全的：
+ * - [BackupKeyException] 同时覆盖「主密码错」与「文件被改过」——AEAD 下二者不可区分，
+ *   `BackupContainer` 刻意不做区分（防 oracle），文案就不能只说一半，否则用户会照着
+ *   「再输一次密码」的方向反复试，而真实原因可能是文件在传输中被人动过。
+ * - [InvalidBackupException] 后面必须跟一句「未导入任何数据」：预检失败时密码库确实
+ *   一条没少，不讲清楚用户会以为已经导了一半。
+ */
+internal fun backupMessage(e: Throwable): String = when (e) {
+    is BackupKeyException -> "主密码错误，或备份文件已损坏 / 被改动。现有条目未受影响。"
+    is BackupFormatException -> "这不是有效的备份文件，或文件在传输中损坏了。现有条目未受影响。"
+    is MalformedBackupException -> "备份文件的内容已损坏，无法解析。现有条目未受影响。"
+    is UnsupportedBackupVersionException ->
+        "该备份由更高版本的应用生成（格式 v${e.formatVersion}），请先升级应用再导入。"
+    is InvalidBackupException ->
+        "备份内容不合规（可能是某条记录缺必填项，或引用了备份里没有的分类），未导入任何数据。"
+    is BackupIoException -> "读写备份文件失败，请检查所选位置是否仍然可用。"
     else -> userMessage(e)
 }

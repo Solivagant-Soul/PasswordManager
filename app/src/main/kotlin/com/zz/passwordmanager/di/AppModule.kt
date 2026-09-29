@@ -3,6 +3,13 @@ package com.zz.passwordmanager.di
 import android.content.Context
 import com.zz.passwordmanager.data.biometric.BiometricToggle
 import com.zz.passwordmanager.data.biometric.UnlockWithBiometric
+import com.zz.passwordmanager.data.backup.BackupCodecRegistry
+import com.zz.passwordmanager.data.backup.BackupContainer
+import com.zz.passwordmanager.data.backup.BackupKeyDeriver
+import com.zz.passwordmanager.data.backup.ExportBackup
+import com.zz.passwordmanager.data.backup.ImportBackup
+import com.zz.passwordmanager.data.backup.JsonBackupCodec
+import com.zz.passwordmanager.data.backup.RoomBackupVault
 import com.zz.passwordmanager.data.crypto.Argon2KeyManager
 import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
@@ -27,10 +34,13 @@ import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultStatus
 import com.zz.passwordmanager.domain.biometric.BiometricDekStore
 import com.zz.passwordmanager.domain.biometric.BiometricGate
+import com.zz.passwordmanager.domain.backup.BackupVault
 import com.zz.passwordmanager.domain.entries.EntryRepository
 import com.zz.passwordmanager.domain.preferences.UserPreferences
 import com.zz.passwordmanager.domain.security.SecurityScanner
 import com.zz.passwordmanager.platform.AndroidClipboardBridge
+import com.zz.passwordmanager.ui.BackupStoreFactory
+import com.zz.passwordmanager.ui.SafBackupStoreFactory
 import com.zz.passwordmanager.platform.biometric.AndroidBiometricGate
 import com.zz.passwordmanager.platform.biometric.KeystoreDekVault
 import dagger.Module
@@ -211,4 +221,63 @@ object AppModule {
     @Singleton
     fun provideClipboardBridge(@ApplicationContext context: Context): AndroidClipboardBridge =
         AndroidClipboardBridge(context)
+
+    // ---- FR-7 加密备份导出/导入（v1.3.0 / D5） ----
+
+    /**
+     * 备份的**整库读写端口**。见 `BackupVault` 的 KDoc：刻意与 `EntryRepository` 分开，
+     * 免得 UI 层拿到一把能一次搬走全库明文的钥匙。
+     *
+     * 注入它的是本文件里的两个备份用例，`:app` 侧**不直接注入**——UI 拿到的只有
+     * [ExportBackup] / [ImportBackup]，明文只在用例内部、用后即清。
+     */
+    @Provides
+    @Singleton
+    fun provideBackupVault(
+        provider: VaultDatabaseProvider,
+        sessionManager: VaultSessionManager,
+        keyManager: KeyManager,
+    ): BackupVault = RoomBackupVault(provider, sessionManager, keyManager)
+
+    @Provides
+    @Singleton
+    fun provideBackupContainer(keyManager: KeyManager): BackupContainer = BackupContainer(keyManager)
+
+    /**
+     * 格式登记表（技术方案 §9.2 的接缝）。二期加 CSV 只需在这里**追加一个 codec**，
+     * 容器与导入流程一行都不用改。
+     */
+    @Provides
+    @Singleton
+    fun provideBackupCodecRegistry(): BackupCodecRegistry = BackupCodecRegistry(listOf(JsonBackupCodec()))
+
+    @Provides
+    @Singleton
+    fun provideBackupKeyDeriver(keyManager: KeyManager, store: VaultHeaderStore): BackupKeyDeriver =
+        BackupKeyDeriver(keyManager, store)
+
+    @Provides
+    fun provideExportBackup(
+        vault: BackupVault,
+        container: BackupContainer,
+        registry: BackupCodecRegistry,
+        keyDeriver: BackupKeyDeriver,
+    ): ExportBackup = ExportBackup(vault, container, registry.default, keyDeriver)
+
+    @Provides
+    fun provideImportBackup(
+        vault: BackupVault,
+        container: BackupContainer,
+        registry: BackupCodecRegistry,
+        keyDeriver: BackupKeyDeriver,
+    ): ImportBackup = ImportBackup(vault, container, registry, keyDeriver)
+
+    /**
+     * SAF 读写端点。抽成接口是为了让备份子页的**编排逻辑**（预检 → 确认 → 提交）
+     * 能在 JVM 单测里跑——`:app` 没有 `src/androidTest`，真 `ContentResolver` 跑不动。
+     */
+    @Provides
+    @Singleton
+    fun provideBackupStoreFactory(@ApplicationContext context: Context): BackupStoreFactory =
+        SafBackupStoreFactory(context)
 }
