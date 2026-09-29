@@ -111,7 +111,7 @@ class VaultViewModelTest {
     }
 
     private fun stubSearch(vararg rows: com.zz.passwordmanager.domain.entries.EntrySummary) {
-        coEvery { repository.search(any(), any(), any()) } returns flow { emit(rows.toList()) }
+        coEvery { repository.search(any(), any()) } returns flow { emit(rows.toList()) }
     }
 
     @Test
@@ -463,7 +463,7 @@ class VaultViewModelTest {
     fun `toggling favorite reloads the detail so the star flips (F3)`() = runTest(dispatcher) {
         // loadDetail 有锁定守卫（锁定态不写回详情），而收藏本就是解锁态动作，故先解锁
         unlockSuccessfully()
-        // EntryDetail 的必填字段：id/title/username/url/notes/categoryId/tags/totpEnabled/createdAt/updatedAt
+        // EntryDetail 的必填字段：id/title/username/url/notes/categoryId/totpEnabled/createdAt/updatedAt
         // （favorite 与 type 有默认值，此处显式给出以表明测试意图）
         val detail = EntryDetail(
             id = "e1",
@@ -472,7 +472,6 @@ class VaultViewModelTest {
             url = null,
             notes = null,
             categoryId = null,
-            tags = emptyList(),
             totpEnabled = false,
             favorite = false,
             createdAt = 0L,
@@ -516,7 +515,7 @@ class VaultViewModelTest {
             EntryDetail(
                 id = "e1", title = "GitHub", username = "u",
                 url = null, notes = null, categoryId = null,
-                tags = emptyList(), totpEnabled = false, createdAt = 0L, updatedAt = 0L,
+                totpEnabled = false, createdAt = 0L, updatedAt = 0L,
             )
         }
 
@@ -621,6 +620,6 @@ class VaultViewModelTest {
 
     private fun input() = com.zz.passwordmanager.domain.entries.EntryInput(
         title = "t", username = "u", password = "p".toCharArray(),
-        url = null, notes = null, categoryId = null, tags = emptyList(),
+        url = null, notes = null, categoryId = null,
     )
 }

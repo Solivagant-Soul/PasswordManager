@@ -49,12 +49,15 @@ sealed interface Screen {
     data object SettingChangePassword : Screen
 }
 
-/** 底部四个一级页（设计稿 v0.8）。切 Tab 不清各自栈，切回时恢复原位置。 */
-enum class AppTab(val label: String, val iconRes: Int) {
-    PASSWORDS("密码", R.drawable.ic_key),
-    GENERATOR("生成", R.drawable.ic_casino),
-    SECURITY("安全", R.drawable.ic_shield),
-    SETTINGS("设置", R.drawable.ic_settings),
+/**
+ * 底部四个一级页（设计稿 v0.8）。每个 Tab 有一个根页，点 Tab 一律回到它
+ * （见 AppNav 内 `selectTab` 处的注释）；`root` 就是那个根页。
+ */
+enum class AppTab(val label: String, val iconRes: Int, val root: Screen) {
+    PASSWORDS("密码", R.drawable.ic_key, Screen.List),
+    GENERATOR("生成", R.drawable.ic_casino, Screen.Generator),
+    SECURITY("安全", R.drawable.ic_shield, Screen.Security),
+    SETTINGS("设置", R.drawable.ic_settings, Screen.Settings),
 }
 
 @Composable
@@ -77,6 +80,18 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
         )
     }
     var currentTab by remember { mutableStateOf(AppTab.PASSWORDS) }
+
+    // 点 Tab 一律回到该 Tab 的根页（覆盖 T44 的「切 Tab 不清栈」）。
+    // 用户的原话是「点了新建 → 点设置 → 再点密码，应该显示所有密码的界面」：
+    // 那套「恢复原位置」的语义在自用场景里反而制造困惑（半路丢下的新建表单还在栈里）。
+    // 已经身处该 Tab 时也重置——这正是主流 App 的行为，兼作「回到顶部/回根页」的出口。
+    fun selectTab(tab: AppTab) {
+        currentTab = tab
+        stacks.getValue(tab).apply {
+            clear()
+            add(tab.root)
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
@@ -122,7 +137,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                     AppTab.entries.forEach { tab ->
                         NavigationBarItem(
                             selected = currentTab == tab,
-                            onClick = { currentTab = tab },
+                            onClick = { selectTab(tab) },
                             // 自绘 drawable 内部带 ?attr/colorControlNormal，
                             // 必须走 Icon（SrcIn 覆写为主题色）而不是 Image
                             icon = {
@@ -271,8 +286,11 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 EntryEditScreen(
                     existing = existing,
                     categories = state.categories,
+                    revealed = top.entryId?.let { state.revealed[it] },
                     errorMessage = state.errorMessage,
                     onGeneratePassword = viewModel::generatePasswordNow,
+                    onReveal = { top.entryId?.let(viewModel::reveal) },
+                    onHide = { top.entryId?.let(viewModel::hide) },
                     onSave = { input -> viewModel.save(top.entryId, input) { backStack.removeAt(backStack.lastIndex) } },
                     onBack = { backStack.removeAt(backStack.lastIndex) },
                 )

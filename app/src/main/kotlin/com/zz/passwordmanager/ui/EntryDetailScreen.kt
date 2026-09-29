@@ -75,7 +75,7 @@ fun EntryDetailScreen(
     // 为此在 AppNav 里加一条回调纯属把导航层和 UI 细节焊死。
     val uriHandler = LocalUriHandler.current
 
-    // 备注上限 2000 字、网址 2048 字，加上固定的 TOTP/标签/底部动作区，
+    // 备注上限 2000 字、网址 2048 字，加上固定的 TOTP 占位/底部动作区，
     // 不滚动的话底部「收藏」按钮直接被推出屏幕，点了没法用。
     Column(
         modifier = Modifier
@@ -163,11 +163,6 @@ fun EntryDetailScreen(
             val notes = detail.notes
             if (!notes.isNullOrEmpty()) {
                 DetailField(label = "备注", value = notes)
-            }
-            // D7 保留标签：编辑页能录入、搜索能按 tag 筛选，但只有录入没有展示的话
-            // 用户再也看不到自己打的标签，故详情页留一行（D7 明确要求保留标签）。
-            if (detail.tags.isNotEmpty()) {
-                DetailField(label = "标签", value = detail.tags.joinToString("、"))
             }
         }
 

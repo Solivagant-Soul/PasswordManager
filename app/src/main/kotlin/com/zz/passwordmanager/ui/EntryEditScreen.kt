@@ -3,6 +3,7 @@ package com.zz.passwordmanager.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,25 +41,37 @@ import com.zz.passwordmanager.ui.components.TopBar
  * 服务级校验错误经 errorMessage 展示。
  *
  * v2.1/D1：条目类型没有 UI 入口了（与「分类」语义重复），列仍在库中；D4：「⚡生成」
- * 零弹窗直填；D7：标签保留但弱化。
+ * 零弹窗直填。
  */
 @Composable
 fun EntryEditScreen(
     existing: com.zz.passwordmanager.domain.entries.EntryDetail?,
     categories: List<com.zz.passwordmanager.domain.entries.Category>,
+    revealed: String?,
     errorMessage: String?,
     onGeneratePassword: () -> String?,
+    onReveal: () -> Unit,
+    onHide: () -> Unit,
     onSave: (EntryInput) -> Unit,
     onBack: () -> Unit,
 ) {
+    // T17：离开编辑页即清除内存中的明文。切 Tab 也会走这里——Change 2 让点 Tab 回到根页，
+    // 换 Tab 即离开本页，onDispose 照常触发。
+    DisposableEffect(Unit) {
+        onDispose { onHide() }
+    }
     var title by remember { mutableStateOf(existing?.title ?: "") }
     var username by remember { mutableStateOf(existing?.username ?: "") }
-    var password by remember { mutableStateOf("") } // 编辑时不回填明文（明文不残留，T17）
+    // 编辑时不回填明文（明文不残留，T17）。用户主动点眼睛才把 revealed 填进来，
+    // 一旦用户自己改过这个字段（`passwordEdited`），就断开与 revealed 的联动——
+    // 否则下一轮明文回写会把用户刚输入的内容覆盖掉。
+    var password by remember { mutableStateOf("") }
+    var passwordEdited by remember { mutableStateOf(false) }
+    val shownPassword = if (passwordEdited) password else (revealed ?: password)
     var url by remember { mutableStateOf(existing?.url ?: "") }
     var notes by remember { mutableStateOf(existing?.notes ?: "") }
-    var tags by remember { mutableStateOf(existing?.tags?.joinToString() ?: "") }
     var localError by remember { mutableStateOf<String?>(null) }
-    // FR-5 分类：单选筛选维度，与多选标签互补
+    // FR-5 分类：单选筛选维度
     var categoryId by remember { mutableStateOf(existing?.categoryId) }
 
     // 收藏的 UI 入口已收敛到详情页，但 update() 会写 favorite 列
@@ -73,11 +87,10 @@ fun EntryEditScreen(
     fun currentInput(): EntryInput = EntryInput(
         title = title.trim(),
         username = username.trim(),
-        password = password.toCharArray(),
+        password = shownPassword.toCharArray(),
         url = url.trim().ifEmpty { null },
         notes = notes.ifEmpty { null },
         categoryId = categoryId,
-        tags = tags.split(',', '，').map { it.trim() }.filter { it.isNotEmpty() },
         favorite = favorite,
         type = type,
     )
@@ -93,7 +106,7 @@ fun EntryEditScreen(
             onBack = onBack,
             action = {
                 TextButton(
-                    enabled = title.isNotBlank() && (existing == null || password.isNotEmpty()),
+                    enabled = title.isNotBlank() && (existing == null || shownPassword.isNotEmpty()),
                     onClick = { onSave(currentInput()) },
                 ) { Text("保存", color = MaterialTheme.colorScheme.primary) }
             },
@@ -113,21 +126,40 @@ fun EntryEditScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
-                value = password, onValueChange = { password = it },
+                value = shownPassword,
+                onValueChange = { password = it; passwordEdited = true },
                 placeholder = { Text("输入或生成密码") },
                 label = { Text("密码") },
                 trailingIcon = {
-                    // 零弹窗直填：用生成器页同一套全局选项（D4）
-                    IconButton(onClick = {
-                        // 不用 `?.let{} ?: 提示` 的写法：赋值表达式返回 Unit（非空），
-                        // 那个 Elvis 右侧永远不会触发，空字符集时就会静默无反应。
-                        val generated = onGeneratePassword()
-                        if (generated != null) password = generated
-                        else localError = "请先在「生成」页至少勾选一类字符集"
-                    }) {
-                        // 自绘 drawable 走 Icon + painterResource：Image 会让 drawable 里
-                        // 的 ?attr/colorControlNormal 直接生效，暗色模式不跟随主题色。
-                        Icon(painter = painterResource(R.drawable.ic_bolt), contentDescription = "生成密码")
+                    Row {
+                        // 「显示原密码」：T17 不允许回填明文，但用户改密码时常常需要
+                        // 确认自己此刻填的是不是原密码，故给一个显式开关——明文只经
+                        // reveal 进 revealed，绝不主动写进表单初值。新建条目没有既有
+                        // 密码可显示，图标不出现。
+                        if (existing != null) {
+                            IconButton(onClick = { if (revealed == null) onReveal() else onHide() }) {
+                                Icon(
+                                    painter = painterResource(
+                                        // 与详情页 DetailField 同一套图标语义：当前是掩码态
+                                        // 就画「睁眼」（点了显示），已明文则画「闭眼」
+                                        if (revealed == null) R.drawable.ic_eye else R.drawable.ic_eye_off,
+                                    ),
+                                    contentDescription = if (revealed == null) "显示原密码" else "隐藏密码",
+                                )
+                            }
+                        }
+                        // 零弹窗直填：用生成器页同一套全局选项（D4）
+                        IconButton(onClick = {
+                            // 不用 `?.let{} ?: 提示` 的写法：赋值表达式返回 Unit（非空），
+                            // 那个 Elvis 右侧永远不会触发，空字符集时就会静默无反应。
+                            val generated = onGeneratePassword()
+                            if (generated != null) { password = generated; passwordEdited = true }
+                            else localError = "请先在「生成」页至少勾选一类字符集"
+                        }) {
+                            // 自绘 drawable 走 Icon + painterResource：Image 会让 drawable 里
+                            // 的 ?attr/colorControlNormal 直接生效，暗色模式不跟随主题色。
+                            Icon(painter = painterResource(R.drawable.ic_bolt), contentDescription = "生成密码")
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -164,16 +196,6 @@ fun EntryEditScreen(
                 label = { Text("备注") },
                 modifier = Modifier.fillMaxWidth(),
             )
-            // 标签保留但弱化（D7）：设计稿未画，但 FR-5 已交付且列表副标题/筛选在用
-            Text(
-                "标签（逗号分隔，最多 20 个）",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = tags, onValueChange = { tags = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
 
         (localError ?: errorMessage)?.let {
@@ -186,7 +208,7 @@ fun EntryEditScreen(
             onClick = {
                 val issues = mutableListOf<String>()
                 if (title.trim().isEmpty()) issues += "标题必填"
-                if (password.isEmpty()) issues += "密码必填"
+                if (shownPassword.isEmpty()) issues += "密码必填"
                 if (issues.isNotEmpty()) {
                     localError = issues.joinToString("；")
                     return@Button
