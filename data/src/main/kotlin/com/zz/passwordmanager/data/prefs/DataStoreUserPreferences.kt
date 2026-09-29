@@ -54,6 +54,15 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
         )
     }
 
+    /**
+     * v1.1.3：**缺键回落 false**（与 generatorOptions 的「缺键回落 true」相反）。
+     * 升级用户的 DataStore 里根本没有这个键，若回落 true 就等于替他打开了截屏，
+     * 而他从未同意过——缺键必须等同于「保持现状」，即不可截屏。
+     */
+    override val allowScreenshots: Flow<Boolean> = store.data.map { prefs ->
+        prefs[KEY_ALLOW_SCREENSHOTS] ?: false
+    }
+
     override suspend fun setAutoLockDuration(duration: AutoLockDuration) {
         store.edit { it[KEY_AUTO_LOCK] = duration.name }
     }
@@ -76,6 +85,10 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
         }
     }
 
+    override suspend fun setAllowScreenshots(allow: Boolean) {
+        store.edit { it[KEY_ALLOW_SCREENSHOTS] = allow }
+    }
+
     private companion object {
         val KEY_AUTO_LOCK = stringPreferencesKey("auto_lock_duration")
         val KEY_DEFAULT_LENGTH = intPreferencesKey("default_password_length")
@@ -84,6 +97,7 @@ class DataStoreUserPreferences(context: Context) : UserPreferences {
         val KEY_USE_DIGIT = booleanPreferencesKey("gen_use_digit")
         val KEY_USE_SYMBOL = booleanPreferencesKey("gen_use_symbol")
         val KEY_EXCLUDE_AMBIGUOUS = booleanPreferencesKey("gen_exclude_ambiguous")
+        val KEY_ALLOW_SCREENSHOTS = booleanPreferencesKey("allow_screenshots")
         val DEFAULT_AUTO_LOCK = AutoLockDuration.M1
         const val DEFAULT_LENGTH = 16
     }

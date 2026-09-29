@@ -42,11 +42,13 @@ fun SettingsScreen(
     biometricEnabled: Boolean,
     categories: List<Category>,
     autoLockDuration: AutoLockDuration,
+    allowScreenshots: Boolean,
     defaultPasswordLength: Int,
     appVersionName: String,
     errorMessage: String?,
     successMessage: String?,
     onOpenAutoLock: () -> Unit,
+    onOpenScreenshots: () -> Unit,
     onOpenBiometric: () -> Unit,
     onOpenDefaultLength: () -> Unit,
     onOpenCategories: () -> Unit,
@@ -71,6 +73,16 @@ fun SettingsScreen(
                 value = if (biometricEnabled) "已开启" else "已关闭",
                 icon = { SettingIcon(R.drawable.ic_fingerprint) },
                 onClick = onOpenBiometric,
+            )
+            // v1.1.3：与生物识别同属「凭据外泄面」，故紧随其后。值只显示状态，
+            // 作用域（全 App）太长，放子页里讲。
+            SettingRow(
+                title = "允许截屏",
+                value = if (allowScreenshots) "已允许" else "已禁止",
+                // 用自绘的「眼睛」而非 material 扩展图标：本项目只依赖 icons-core，
+                // Visibility 属于 material-icons-extended，不为此加一个依赖。
+                icon = { SettingIcon(R.drawable.ic_eye) },
+                onClick = onOpenScreenshots,
             )
             SettingRow(
                 title = "自动锁定",

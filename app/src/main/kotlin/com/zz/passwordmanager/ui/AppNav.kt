@@ -44,6 +44,7 @@ sealed interface Screen {
     // 设置子页（v2.1/§4）：只压入 SETTINGS 栈，返回键逐级回退
     data object SettingAutoLock : Screen
     data object SettingBiometric : Screen
+    data object SettingScreenshots : Screen
     data object SettingDefaultLength : Screen
     data object SettingCategories : Screen
     data object SettingChangePassword : Screen
@@ -216,6 +217,12 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onBack = { backStack.removeAt(backStack.lastIndex) },
             )
 
+            Screen.SettingScreenshots -> ScreenshotSettingScreen(
+                allow = state.allowScreenshots,
+                onToggle = viewModel::setAllowScreenshots,
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
             Screen.SettingDefaultLength -> DefaultLengthSettingScreen(
                 current = state.defaultPasswordLength,
                 onChange = viewModel::setDefaultPasswordLength,
@@ -244,11 +251,13 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 biometricEnabled = state.biometricEnabled,
                 categories = state.categories,
                 autoLockDuration = state.autoLockDuration,
+                allowScreenshots = state.allowScreenshots,
                 defaultPasswordLength = state.defaultPasswordLength,
                 appVersionName = versionName,
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
                 onOpenAutoLock = { backStack.add(Screen.SettingAutoLock) },
+                onOpenScreenshots = { backStack.add(Screen.SettingScreenshots) },
                 onOpenBiometric = { backStack.add(Screen.SettingBiometric) },
                 onOpenDefaultLength = { backStack.add(Screen.SettingDefaultLength) },
                 onOpenCategories = { backStack.add(Screen.SettingCategories) },

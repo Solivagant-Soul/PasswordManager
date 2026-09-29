@@ -79,6 +79,8 @@ data class VaultUiState(
     val defaultPasswordLength: Int = 16,
     /** v2.1/D4：生成器选项（长度之外的四个字符集开关 + 排除易混淆），全局共享。 */
     val generatorOptions: GeneratorOptions = GeneratorOptions(),
+    /** v1.1.3：是否允许截屏/录屏。默认 false = 保持 v1 起的 FLAG_SECURE 行为。 */
+    val allowScreenshots: Boolean = false,
     /** 全部分类（列表 chips 用）。 */
     val categories: List<Category> = emptyList(),
     /** 当前分类筛选（null = 全部）。 */
@@ -138,6 +140,13 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.generatorOptions.collect { options ->
                 _state.update { it.copy(generatorOptions = options) }
+            }
+        }
+        // v1.1.3：截屏开关也走「订阅即生效」。MainActivity 自己另有一路订阅去改
+        // window flag；这里只负责让设置页开关显示当前值，不重复持有副作用。
+        viewModelScope.launch {
+            preferences.allowScreenshots.collect { allow ->
+                _state.update { it.copy(allowScreenshots = allow) }
             }
         }
         refreshBiometricAvailability()
@@ -203,6 +212,11 @@ class VaultViewModel @Inject constructor(
 
     fun setGeneratorOptions(options: GeneratorOptions) {
         viewModelScope.launch { preferences.setGeneratorOptions(options) }
+    }
+
+    /** v1.1.3：截屏开关。写入即由 DataStore 回流到 [_state]，UI 不做乐观更新。 */
+    fun setAllowScreenshots(allow: Boolean) {
+        viewModelScope.launch { preferences.setAllowScreenshots(allow) }
     }
 
     /**

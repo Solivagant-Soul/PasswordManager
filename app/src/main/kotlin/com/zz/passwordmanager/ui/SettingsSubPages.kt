@@ -162,6 +162,50 @@ fun BiometricSettingScreen(
     }
 }
 
+/**
+ * v1.1.3：允许截屏/录屏。默认关闭（即 FLAG_SECURE 置位）。
+ *
+ * 放在生物识别子页之后（与调用方在 AppNav 的压栈顺序一致），因为两者同属
+ * 「凭据外泄面」而非生成偏好。
+ */
+@Composable
+fun ScreenshotSettingScreen(
+    allow: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        TopBar(title = "允许截屏", onBack = onBack)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                if (allow) "已允许截屏与录屏" else "已禁止截屏与录屏（推荐）",
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = allow, onCheckedChange = onToggle)
+        }
+        Spacer(Modifier.height(12.dp))
+        // 三条限制必须写进文案：作用域是全 App、默认是禁止、且管不了另一台设备拍屏。
+        // 少了任何一条，用户都会以为「开了就只放开某一个页面」。
+        Text(
+            "默认禁止，开启后可截屏与录屏。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "注意：开关是「整个 App」级别的，无法只放开某一页——系统把「禁止截屏」记在窗口上，" +
+                "而本 App 只有一个界面容器。打开后所有页面（含解锁屏与列表）都可被截屏，" +
+                "最近任务缩略图也会显示真实内容。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "它也挡不住别人用另一台设备对着屏幕拍照。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 /** 默认密码长度（T41）。上界与 [PasswordGenerator.LENGTH_MAX] 一致（Task 2 已收窄为 32）。 */
 @Composable
 fun DefaultLengthSettingScreen(
