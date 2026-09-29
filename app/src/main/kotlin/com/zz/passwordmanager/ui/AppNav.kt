@@ -27,6 +27,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zz.passwordmanager.AppApplication
 import com.zz.passwordmanager.R
+import com.zz.passwordmanager.autofill.AutofillAvailability
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.platform.biometric.BiometricDiagnostics
 import kotlinx.coroutines.launch
@@ -48,6 +49,7 @@ sealed interface Screen {
     data object SettingDefaultLength : Screen
     data object SettingCategories : Screen
     data object SettingChangePassword : Screen
+    data object SettingAutofill : Screen
 }
 
 /**
@@ -70,6 +72,10 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
             appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName
         }.getOrNull() ?: "1.0.0"
     }
+    // 填充服务的启用状态在**系统设置**里（FR-6），是跨进程的一次查询：
+    // 用 remember 把它钉住，别在每次重组都去问系统一遍。
+    // 从系统设置跳回来时 Activity 会被重建，remember 自然重算，状态不会过期。
+    val autofillEnabled = remember(appContext) { AutofillAvailability.isServiceEnabled(appContext) }
 
     // 每个 Tab 各自持有回退栈
     val stacks = remember {
@@ -252,6 +258,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 categories = state.categories,
                 autoLockDuration = state.autoLockDuration,
                 allowScreenshots = state.allowScreenshots,
+                autofillEnabled = autofillEnabled,
                 defaultPasswordLength = state.defaultPasswordLength,
                 appVersionName = versionName,
                 errorMessage = state.errorMessage,
@@ -259,6 +266,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onOpenAutoLock = { backStack.add(Screen.SettingAutoLock) },
                 onOpenScreenshots = { backStack.add(Screen.SettingScreenshots) },
                 onOpenBiometric = { backStack.add(Screen.SettingBiometric) },
+                onOpenAutofill = { backStack.add(Screen.SettingAutofill) },
                 onOpenDefaultLength = { backStack.add(Screen.SettingDefaultLength) },
                 onOpenCategories = { backStack.add(Screen.SettingCategories) },
                 onOpenChangePassword = { backStack.add(Screen.SettingChangePassword) },
@@ -267,6 +275,10 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 onComingSoon = { message ->
                     snackbarScope.launch { snackbarHostState.showSnackbar(message) }
                 },
+            )
+
+            Screen.SettingAutofill -> AutofillSettingScreen(
+                onBack = { backStack.removeAt(backStack.lastIndex) },
             )
 
             is Screen.Detail -> {

@@ -42,6 +42,17 @@ import com.zz.passwordmanager.ui.components.TopBar
  *
  * v2.1/D1：条目类型没有 UI 入口了（与「分类」语义重复），列仍在库中；D4：「⚡生成」
  * 零弹窗直填。
+ *
+ * **本屏不参与自动填充**（v1.2.0 实测结论）：`Modifier.semantics { contentType = … }`
+ * 是 Compose 里给字段打 autofill hint 的正规做法，但本工程解析到的
+ * `androidx.compose.ui:ui-android:1.7.6` 把 `ContentType` 与
+ * `SemanticsPropertyReceiver.contentType` 标成了 **internal**（kotlinc 报
+ * 「Cannot access … it is internal」），Compose 1.7.x 没有第二个公开入口。
+ * 与其挂一个每次重组都试错的 workaround，不如在 [MainActivity] 上统一用
+ * `android:importantForAutofill="noExcludeDescendants"` 把整个密码库排除在填充目标之外——
+ * 这条对「主密码框绝不能被任何填充服务盯上」来说反而是更紧的约束。
+ * 目标 App 那侧的字段识别走 [com.zz.passwordmanager.autofill.AutofillStructureReader]，
+ * 不依赖本屏。
  */
 @Composable
 fun EntryEditScreen(

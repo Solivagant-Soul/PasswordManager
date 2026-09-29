@@ -26,14 +26,53 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PasswordManager">
 
+        <!--
+          整个密码库排除在自动填充的**目标**之外（v1.2.0）。
+          主密码框一旦被任何填充服务（哪怕是我们自己的）认作目标，那条凭据就会
+          进入候选列表；而编辑页的密码框此刻可能正显示着明文。
+          填充是「往别的 App 送凭据」的能力，本 App 不需要成为被填的对象。
+        -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:importantForAutofill="noExcludeDescendants">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          FR-6 自动填充。`BIND_AUTOFILL_SERVICE` 是 signature 级权限，只授予被系统
+          设置页选中的那一个填充服务；未启用时系统不会回调本服务，应用其余功能无感。
+
+          `exported=true` + 显式 intent-filter：AutofillService 由系统跨进程绑定，
+          不导出就绑不上。但组件只接这一条 action，不接任何可被三方直接调用的入口。
+        -->
+        <service
+            android:name=".autofill.VaultAutofillService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          填充认证页：由系统在本服务给出的 Dataset 被点中时拉起。
+          `exported=false`——它只该被本进程/系统通过显式 Intent 拉起，
+          不导出可挡掉「任意 App 把它拉起来、假装用户已认证」的伪造。
+          `excludeFromRecents`：它持有一份短时 DEK，不该出现在最近任务里。
+          刻意**不**加 noHistory：系统在认证流期间可能把自身的填充 UI 叠上来，
+          noHistory 会把本 Activity 连带 finish 掉、认证流当场断在半截。
+          生命周期清零改由 onDestroy + 会话 TTL 兜。
+        -->
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.PasswordManager" />
     </application>
 
 </manifest>

@@ -13,6 +13,9 @@ import com.zz.passwordmanager.data.header.VaultHeaderStore
 import com.zz.passwordmanager.data.prefs.DataStoreUserPreferences
 import com.zz.passwordmanager.data.security.DefaultSecurityScanner
 import com.zz.passwordmanager.data.vault.AuthThrottle
+import com.zz.passwordmanager.data.vault.AutofillVaultReader
+import com.zz.passwordmanager.data.vault.AutofillVaultSession
+import com.zz.passwordmanager.data.vault.RoomAutofillVaultReader
 import com.zz.passwordmanager.data.vault.ChangeMasterPassword
 import com.zz.passwordmanager.data.vault.ChangeSecurityQuestions
 import com.zz.passwordmanager.data.vault.DestroyVault
@@ -95,6 +98,30 @@ object AppModule {
     @Provides
     fun provideUnlockVault(keyManager: KeyManager, store: VaultHeaderStore, throttle: AuthThrottle): UnlockVault =
         UnlockVault(keyManager, store, throttle)
+
+    /**
+     * FR-6 自动填充的自持会话（v1.2.0）。
+     *
+     * 单例是**必需**而非图省事：服务只递 Intent、真正解锁的是认证 Activity，
+     * 两者要共享同一份「这一次」的解锁状态；进程被杀则单例随之消失，
+     * 不会有跨进程的残留。
+     *
+     * 刻意不注入 [VaultSessionManager]：注入它就等于把自动填充接回 UI 那条长会话，
+     * 正是技术方案 §9.2 明令禁止的那条旁路。
+     */
+    @Provides
+    @Singleton
+    fun provideAutofillVaultSession(
+        unlockVault: UnlockVault,
+        reader: AutofillVaultReader,
+    ): AutofillVaultSession = AutofillVaultSession(unlockVault, reader)
+
+    @Provides
+    @Singleton
+    fun provideAutofillVaultReader(
+        provider: VaultDatabaseProvider,
+        keyManager: KeyManager,
+    ): AutofillVaultReader = RoomAutofillVaultReader(provider, keyManager)
 
     @Provides
     fun provideResetVault(keyManager: KeyManager, store: VaultHeaderStore, throttle: AuthThrottle): ResetVault =

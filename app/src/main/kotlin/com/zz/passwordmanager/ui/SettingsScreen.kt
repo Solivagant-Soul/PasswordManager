@@ -43,6 +43,7 @@ fun SettingsScreen(
     categories: List<Category>,
     autoLockDuration: AutoLockDuration,
     allowScreenshots: Boolean,
+    autofillEnabled: Boolean,
     defaultPasswordLength: Int,
     appVersionName: String,
     errorMessage: String?,
@@ -50,6 +51,7 @@ fun SettingsScreen(
     onOpenAutoLock: () -> Unit,
     onOpenScreenshots: () -> Unit,
     onOpenBiometric: () -> Unit,
+    onOpenAutofill: () -> Unit,
     onOpenDefaultLength: () -> Unit,
     onOpenCategories: () -> Unit,
     onOpenChangePassword: () -> Unit,
@@ -89,6 +91,14 @@ fun SettingsScreen(
                 value = autoLockDuration.displayLabel,
                 icon = { VectorSettingIcon(Icons.Default.Lock) },
                 onClick = onOpenAutoLock,
+            )
+            // FR-6：开关在**系统设置**里，应用无权自启自举，故这里只报状态 + 导航。
+            // 用 Key 图标（无对应自绘 drawable），与「默认密码长度」同款。
+            SettingRow(
+                title = "自动填充",
+                value = if (autofillEnabled) "已开启" else "未开启",
+                icon = { SettingIcon(R.drawable.ic_key) },
+                onClick = onOpenAutofill,
             )
             SettingRow(
                 title = "默认密码长度",
