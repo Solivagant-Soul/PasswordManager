@@ -153,7 +153,12 @@ class VaultViewModel @Inject constructor(
                 when (vaultState) {
                     // 初值即 Locked，用 !locked 守卫避免初始化时把状态清一遍
                     is VaultState.Locked -> if (!_state.value.locked) applyLocked()
-                    is VaultState.Unlocked -> _state.update { it.copy(locked = false) }
+                    // 成功解锁时顺带清掉 errorMessage：紧邻其上一次失败的尝试（例如主密码先输错一次）
+                    // 会把「主密码错误，还可尝试 N 次」留在 state 里，而 applyLocked() 跑在锁定时、
+                    // dismissError() 这条路径上无人调用，于是它会渲染在已解锁的列表页上。
+                    // 收在这里而不是各处 onSuccess：三条解锁路径（主密码 / 生物识别 / 密保重置）
+                    // 都要走 sessionManager.begin()，此分支是它们唯一的汇合点，修复不会随路径漂移。
+                    is VaultState.Unlocked -> _state.update { it.copy(locked = false, errorMessage = null) }
                 }
             }
         }

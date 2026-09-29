@@ -144,6 +144,30 @@ class VaultViewModelTest {
         assertTrue(viewModel.state.first().errorMessage != null)
     }
 
+    /**
+     * 回归：先输错一次主密码、再输对——解锁成功后列表页不得残留上一次的错误提示。
+     *
+     * 此前 `unlock()` 的 onSuccess 只 `sessionManager.begin()`，`errorMessage` 无人清理：
+     * `applyLocked()` 在锁定时清（解锁时还没发生过），`dismissError()` 这条路径上没人调，
+     * 于是「主密码错误，还可尝试 4 次」被带进已解锁的列表页。
+     * 清空点选在 sessionManager collector 的 Unlocked 分支——三条解锁路径的唯一汇合点。
+     */
+    @Test
+    fun `unlock after a wrong attempt clears the previous error message`() = runTest(dispatcher) {
+        stubSearch()
+        coEvery { unlockVault(any()) } returns Result.failure(AuthException(AuthError.WrongPassword(4)))
+        viewModel.unlock("bad")
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals("前提：先留在错误提示上", "主密码错误，还可尝试 4 次", viewModel.state.first().errorMessage)
+
+        coEvery { unlockVault(any()) } returns Result.success(mockk(relaxed = true))
+        viewModel.unlock("pw")
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse("前提：应已解锁", viewModel.state.first().locked)
+        assertNull("解锁后不得残留上一次的错误提示", viewModel.state.first().errorMessage)
+    }
+
     @Test
     fun `search delegates query and updates entries`() = runTest(dispatcher) {
         stubSearch(com.zz.passwordmanager.domain.entries.EntrySummary("e1", "Site", "u", null, null))

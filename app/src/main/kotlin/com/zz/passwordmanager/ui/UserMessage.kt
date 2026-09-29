@@ -5,6 +5,7 @@ import com.zz.passwordmanager.data.vault.AuthError
 import com.zz.passwordmanager.data.vault.AuthException
 import com.zz.passwordmanager.data.vault.InitializationError
 import com.zz.passwordmanager.data.vault.InitializationException
+import com.zz.passwordmanager.data.vault.VaultLockedException
 import com.zz.passwordmanager.domain.biometric.BiometricGate
 import com.zz.passwordmanager.domain.entries.EntryRepositoryException
 
@@ -28,6 +29,10 @@ internal fun userMessage(e: Throwable): String = when (e) {
         EntryRepositoryException.Reason.NOT_FOUND -> "条目不存在或已删除"
         EntryRepositoryException.Reason.INVALID -> invalidMessage(e.issues.map { it.message })
     }
+    // requireUnlocked() 抛出的竞态信号：落到 else 只会显示「操作失败，请重试」，
+    // 用户既不知道该解锁也不知道操作没生效。成因尚未查明（独立的未调查缺陷），
+    // 此处只保证它一旦发生是可读的。
+    is VaultLockedException -> "密码库已锁定，操作未执行"
     else -> "操作失败，请重试"
 }
 
