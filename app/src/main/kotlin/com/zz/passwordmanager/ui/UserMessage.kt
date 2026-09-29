@@ -83,6 +83,7 @@ private fun invalidMessage(issues: List<String>): String {
         issues.isEmpty() -> "输入不符合要求"
         has("mismatch") -> "两次输入不一致"
         has("securityquestions") -> "密保问题或答案不符合要求（需 3 道，答案不超过 60 字）"
+        has("username") -> "用户名 / 账号必填"
         has("title") -> "标题必填且不超过 100 字"
         has("password") -> "密码至少 8 位，且需包含大写、小写、数字、符号中的两类"
         has("url") -> "网址须以 http:// 或 https:// 开头"

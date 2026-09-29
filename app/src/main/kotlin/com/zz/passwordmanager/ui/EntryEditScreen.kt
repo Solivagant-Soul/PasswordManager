@@ -98,6 +98,22 @@ fun EntryEditScreen(
         type = type,
     )
 
+    // v1.1.2：名称 / 用户名 / 密码三项必填。两个保存入口共用这一段，
+    // 且都不再靠 `enabled` 预先禁用——禁用会让用户点了没反应、也永远看不到
+    // 「是哪一项没填」，反而不如点下去给出具体提示。
+    fun saveWithCheck() {
+        val issues = mutableListOf<String>()
+        if (title.trim().isEmpty()) issues += "名称必填"
+        if (username.trim().isEmpty()) issues += "用户名 / 账号必填"
+        if (shownPassword.isEmpty()) issues += "密码必填"
+        if (issues.isNotEmpty()) {
+            localError = issues.joinToString("；")
+            return
+        }
+        localError = null
+        onSave(currentInput())
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -108,10 +124,9 @@ fun EntryEditScreen(
             title = if (existing == null) "新建条目" else "编辑条目",
             onBack = onBack,
             action = {
-                TextButton(
-                    enabled = title.isNotBlank() && (existing == null || shownPassword.isNotEmpty()),
-                    onClick = { onSave(currentInput()) },
-                ) { Text("保存", color = MaterialTheme.colorScheme.primary) }
+                TextButton(onClick = { saveWithCheck() }) {
+                    Text("保存", color = MaterialTheme.colorScheme.primary)
+                }
             },
         )
 
@@ -119,20 +134,22 @@ fun EntryEditScreen(
             OutlinedTextField(
                 value = title, onValueChange = { title = it },
                 placeholder = { Text("例如 GitHub") },
-                label = { Text("名称") },
+                // 星号标在 label 里而非 placeholder：label 始终可见，
+                // placeholder 一有输入就消失，标不出「这项必填」。
+                label = { Text("名称 *") },
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = username, onValueChange = { username = it },
                 placeholder = { Text("user@example.com") },
-                label = { Text("用户名 / 账号") },
+                label = { Text("用户名 / 账号 *") },
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = shownPassword,
                 onValueChange = { password = it; passwordEdited = true },
                 placeholder = { Text("输入或生成密码") },
-                label = { Text("密码") },
+                label = { Text("密码 *") },
                 trailingIcon = {
                     Row {
                         // 「显示原密码」：T17 不允许回填明文，但用户改密码时常常需要
@@ -217,20 +234,7 @@ fun EntryEditScreen(
         }
 
         Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = {
-                val issues = mutableListOf<String>()
-                if (title.trim().isEmpty()) issues += "标题必填"
-                if (shownPassword.isEmpty()) issues += "密码必填"
-                if (issues.isNotEmpty()) {
-                    localError = issues.joinToString("；")
-                    return@Button
-                }
-                localError = null
-                onSave(currentInput())
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("保存") }
+        Button(onClick = { saveWithCheck() }, modifier = Modifier.fillMaxWidth()) { Text("保存") }
     }
 }
 

@@ -53,11 +53,13 @@ class EntryRepositoryImplTest {
 
     private fun input(
         title: String = "站点",
+        // v1.1.2 起 username 必填，默认给非空值；只有专门测校验的用例才传空。
+        username: String = "user",
         password: String = "P@ss 明文",
         url: String? = "https://example.com",
     ) = EntryInput(
         title = title,
-        username = "user",
+        username = username,
         password = password.toCharArray(),
         url = url,
         notes = null,
@@ -108,6 +110,14 @@ class EntryRepositoryImplTest {
         val issues = (result.exceptionOrNull() as EntryRepositoryException).issues
         assertTrue(issues.any { it.field == "title" })
         assertTrue(issues.any { it.field == "password" })
+    }
+
+    @Test
+    fun `create rejects blank username because it is required since v1_1_2`() = runTest {
+        val result = repository.create(input(username = "   "))
+
+        val issues = (result.exceptionOrNull() as EntryRepositoryException).issues
+        assertTrue(issues.any { it.field == "username" })
     }
 
     @Test

@@ -181,6 +181,13 @@ class EntryRepositoryImpl(
         if (title.isEmpty() || title.length > TITLE_MAX) {
             issues += EntryIssue("title", "length must be 1..$TITLE_MAX")
         }
+        // v1.1.2：用户名与名称、密码同为必填（此前允许为空）。校验放在仓库层而非
+        // 只靠编辑页——绕过 UI 的调用方（导入链路、未来自动化）同样要吃到这条规则。
+        // message 里带上字段名，是为了让 :app 的 invalidMessage 能把它映射成
+        // 「用户名 / 账号必填」而不是落到兜底文案。
+        if (input.username.isBlank()) {
+            issues += EntryIssue("username", "username must not be empty")
+        }
         if (input.password.isEmpty()) {
             issues += EntryIssue("password", "must not be empty")
         }
