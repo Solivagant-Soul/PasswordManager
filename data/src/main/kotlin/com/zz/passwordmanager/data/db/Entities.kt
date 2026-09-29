@@ -1,7 +1,6 @@
 package com.zz.passwordmanager.data.db
 
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -60,33 +59,6 @@ data class CategoryEntity(
     val name: String,
 )
 
-/** 标签（以名称为主键，天然去重）。 */
-@Entity(tableName = "tags")
-data class TagEntity(
-    @PrimaryKey val name: String,
-)
-
-/** 条目-标签多对多；单条 ≤20 的上限在上层校验。 */
-@Entity(
-    tableName = "entry_tags",
-    primaryKeys = ["entryId", "tagName"],
-    foreignKeys = [
-        ForeignKey(
-            entity = EntryEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["entryId"],
-            onDelete = ForeignKey.CASCADE,
-        ),
-        ForeignKey(
-            entity = TagEntity::class,
-            parentColumns = ["name"],
-            childColumns = ["tagName"],
-            onDelete = ForeignKey.CASCADE,
-        ),
-    ],
-    indices = [Index("entryId"), Index("tagName")],
-)
-data class EntryTagEntity(
-    val entryId: String,
-    val tagName: String,
-)
+// 标签功能已在 schema v4 整体移除（产品决策：分类承担归类维度）；迁移见 MIGRATION_3_4。
+// 留这一行注释以说明 `entries` 表**从不**有 tags 列——标签一直是两张关系表，
+// 所以 v3→v4 只需 DROP 两张表，不涉及列手术。

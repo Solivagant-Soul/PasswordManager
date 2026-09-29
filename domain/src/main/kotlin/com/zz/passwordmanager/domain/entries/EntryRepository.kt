@@ -26,7 +26,6 @@ data class EntryDetail(
     val url: String?,
     val notes: String?,
     val categoryId: String?,
-    val tags: List<String>,
     val totpEnabled: Boolean,
     val favorite: Boolean = false,
     val type: EntryType = EntryType.ACCOUNT,
@@ -49,7 +48,6 @@ data class EntryInput(
     val url: String?,
     val notes: String?,
     val categoryId: String?,
-    val tags: List<String>,
     val totpSecret: CharArray? = null,
     /** 收藏（FR-5）。 */
     val favorite: Boolean = false,
@@ -60,7 +58,7 @@ data class EntryInput(
 interface EntryRepository {
 
     /** 搜索/列表（返回摘要；锁定态由 UI 状态机挡在门外，此方法不含敏感信息）。 */
-    fun search(query: String, categoryId: String?, tag: String?): Flow<List<EntrySummary>>
+    fun search(query: String, categoryId: String?): Flow<List<EntrySummary>>
 
     suspend fun get(id: String): EntryDetail?
 
@@ -78,7 +76,7 @@ interface EntryRepository {
      */
     suspend fun setFavorite(id: String, favorite: Boolean): Result<Unit>
 
-    /** 永久删除（UI 负责二次确认，FR-3）；条目关联标签随外键级联清理。 */
+    /** 永久删除（UI 负责二次确认，FR-3）。 */
     suspend fun delete(id: String): Result<Unit>
 
     /** 明文密码（掩码显隐/复制，FR-9）。仅解锁态；@throws VaultLockedException */
@@ -95,7 +93,7 @@ class EntryRepositoryException(val reason: Reason, val issues: List<EntryIssue> 
 data class EntryIssue(val field: String, val message: String)
 
 /**
- * 分类（T34/FR-5）：**单选**，作为列表的筛选维度。
- * 与标签（多选、归类维度）互补——见需求 §13.0 C6。
+ * 分类（T34/FR-5）：**单选**，作为列表的唯一筛选维度。
+ * 原先与「标签（多选）」互补的定位已随标签移除而结束——归类维度统一交给分类。
  */
 data class Category(val id: String, val name: String)

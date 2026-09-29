@@ -83,8 +83,6 @@ data class VaultUiState(
     val categories: List<Category> = emptyList(),
     /** 当前分类筛选（null = 全部）。 */
     val categoryFilter: String? = null,
-    /** 标签筛选（null = 全部）。 */
-    val tagFilter: String? = null,
     /** 仅看收藏。 */
     val favoritesOnly: Boolean = false,
     /** FR-2 生物识别是否已开启（设置页开关读它；不含硬件就绪判断）。 */
@@ -529,7 +527,7 @@ class VaultViewModel @Inject constructor(
         listJob?.cancel()
         listJob = viewModelScope.launch {
             try {
-                entryRepository.search(s.query, categoryId, s.tagFilter).collect { rows ->
+                entryRepository.search(s.query, categoryId).collect { rows ->
                     _state.update {
                         val filtered = if (s.favoritesOnly) rows.filter { it.favorite } else rows
                         it.copy(entries = filtered)

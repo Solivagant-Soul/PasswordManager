@@ -4,8 +4,6 @@ import com.zz.passwordmanager.data.crypto.Argon2KeyManager
 import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.EntryDao
 import com.zz.passwordmanager.data.db.EntryRow
-import com.zz.passwordmanager.data.db.EntryTagDao
-import com.zz.passwordmanager.data.db.TagDao
 import com.zz.passwordmanager.data.db.VaultDatabase
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
 import com.zz.passwordmanager.data.header.KdfParams
@@ -46,12 +44,8 @@ class EntryRepositoryImplTest {
         every { state } returns MutableStateFlow(VaultState.Unlocked(session))
     }
     private val entryDao: EntryDao = mockk(relaxed = true)
-    private val tagDao: TagDao = mockk(relaxed = true)
-    private val entryTagDao: EntryTagDao = mockk(relaxed = true)
     private val mockDb: VaultDatabase = mockk {
         every { entryDao() } returns entryDao
-        every { tagDao() } returns tagDao
-        every { entryTagDao() } returns entryTagDao
     }
     private val dbProvider: VaultDatabaseProvider = mockk()
     private val keyManager: KeyManager = Argon2KeyManager(recoveryKdfParams = SMALL)
@@ -60,7 +54,6 @@ class EntryRepositoryImplTest {
     private fun input(
         title: String = "站点",
         password: String = "P@ss 明文",
-        tags: List<String> = emptyList(),
         url: String? = "https://example.com",
     ) = EntryInput(
         title = title,
@@ -69,7 +62,6 @@ class EntryRepositoryImplTest {
         url = url,
         notes = null,
         categoryId = null,
-        tags = tags,
     )
 
     @Before
@@ -124,14 +116,6 @@ class EntryRepositoryImplTest {
 
         val issues = (result.exceptionOrNull() as EntryRepositoryException).issues
         assertTrue(issues.any { it.field == "url" })
-    }
-
-    @Test
-    fun `create rejects more than 20 tags`() = runTest {
-        val result = repository.create(input(tags = (1..21).map { "t$it" }))
-
-        val issues = (result.exceptionOrNull() as EntryRepositoryException).issues
-        assertTrue(issues.any { it.field == "tags" })
     }
 
     // ---- TOTP 预留（需求 §1.4 二期；一期只保证数据通路，见技术方案 §9.2） ----
@@ -197,7 +181,7 @@ class EntryRepositoryImplTest {
             entryDao.observe("site", null)
         } returns flowOf(listOf(EntryRow("e1", "Site", "u", "https://x", null)))
 
-        val summaries = repository.search("SiTe", null, null).first()
+        val summaries = repository.search("SiTe", null).first()
 
         assertEquals(1, summaries.size)
         assertEquals("Site", summaries[0].title)

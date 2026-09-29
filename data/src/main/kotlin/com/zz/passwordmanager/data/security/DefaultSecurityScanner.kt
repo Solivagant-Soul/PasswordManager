@@ -31,7 +31,7 @@ class DefaultSecurityScanner(
 ) : SecurityScanner {
 
     override suspend fun scan(): SecurityReport = withContext(ioDispatcher) {
-        val entries = repository.search("", null, null).first()
+        val entries = repository.search("", null).first()
         val total = entries.size
         if (total == 0) return@withContext SecurityReport(0, scannedAtEpochMs = now())
 

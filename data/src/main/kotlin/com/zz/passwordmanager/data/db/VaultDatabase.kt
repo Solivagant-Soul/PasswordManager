@@ -11,21 +11,34 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 /**
  * Vault Body：整库加密的密码库（库密钥 = DEK，方案 §4.2）。
  *
- * schema v3（FR-5/FR-15：收藏 + 条目类型）；schema 变更必须伴随 Room 迁移与迁移测试（R9）。
+ * schema v4（移除标签：分类承担归类维度）；schema 变更必须伴随 Room 迁移与迁移测试（R9）。
  */
 @Database(
-    entities = [EntryEntity::class, CategoryEntity::class, TagEntity::class, EntryTagEntity::class],
-    version = 3,
+    entities = [EntryEntity::class, CategoryEntity::class],
+    version = 4,
     exportSchema = true,
 )
 abstract class VaultDatabase : RoomDatabase() {
 
     abstract fun entryDao(): EntryDao
     abstract fun categoryDao(): CategoryDao
-    abstract fun tagDao(): TagDao
-    abstract fun entryTagDao(): EntryTagDao
 
     companion object {
+
+        /**
+         * v3 → v4：整体移除标签功能。`tags` 与 `entry_tags` 两张表直接丢弃——
+         * 标签从来只是关系表，`entries` 上没有 tags 列，故无需列手术、条目本身零影响。
+         *
+         * 顺序不可调换：`entry_tags` 对 `entries` 与 `tags` 都挂了外键，
+         * 先删子表再删父表才不依赖 DROP TABLE 隐式 DELETE 的级联行为——
+         * 反过来先删 `tags`，能否成功取决于 `PRAGMA foreign_keys` 的开关时机，不可赌。
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS entry_tags")
+                db.execSQL("DROP TABLE IF EXISTS tags")
+            }
+        }
 
         /**
          * v2 → v3（FR-5 收藏 / FR-15 条目类型）：新增两列并回填默认值。
@@ -73,7 +86,7 @@ abstract class VaultDatabase : RoomDatabase() {
             System.loadLibrary("sqlcipher")
             return Room.databaseBuilder(context, VaultDatabase::class.java, databaseName)
                 .openHelperFactory(SupportOpenHelperFactory(dek))
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
     }

@@ -6,7 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
-/** T13 DAO：搜索/过滤/计数/标签深化（M2）；T03 的基础读写保留。 */
+/** T13 DAO：搜索/过滤/计数（M2）；T03 的基础读写保留。 */
 @Dao
 interface EntryDao {
 
@@ -66,30 +66,6 @@ interface EntryDao {
 
     @Query("SELECT COUNT(*) FROM entries")
     suspend fun countForLimit(): Int
-
-    /** 标签过滤（JOIN entry_tags）+ 可选分类/搜索组合。 */
-    @Query(
-        "SELECT e.id, e.title, e.username, e.url, e.categoryId, e.favorite, e.type FROM entries e " +
-            "JOIN entry_tags t ON e.id = t.entryId " +
-            "WHERE t.tagName = :tag " +
-            "AND (:categoryId IS NULL OR e.categoryId = :categoryId) " +
-            "AND (:query = '' OR e.titleLower LIKE '%' || :query || '%' " +
-            "OR e.usernameLower LIKE '%' || :query || '%' OR e.urlLower LIKE '%' || :query || '%') " +
-            "ORDER BY e.titleLower",
-    )
-    suspend fun searchByTag(tag: String, categoryId: String?, query: String): List<EntryRow>
-
-    /** 标签过滤的响应式版本（FR-18）。 */
-    @Query(
-        "SELECT e.id, e.title, e.username, e.url, e.categoryId, e.favorite, e.type FROM entries e " +
-            "JOIN entry_tags t ON e.id = t.entryId " +
-            "WHERE t.tagName = :tag " +
-            "AND (:categoryId IS NULL OR e.categoryId = :categoryId) " +
-            "AND (:query = '' OR e.titleLower LIKE '%' || :query || '%' " +
-            "OR e.usernameLower LIKE '%' || :query || '%' OR e.urlLower LIKE '%' || :query || '%') " +
-            "ORDER BY e.titleLower",
-    )
-    fun observeByTag(tag: String, categoryId: String?, query: String): Flow<List<EntryRow>>
 }
 
 /** 列表/搜索投影（不含密码密文——列表场景无需解密）。 */
@@ -115,30 +91,6 @@ interface CategoryDao {
     @Query("SELECT COUNT(*) FROM entries WHERE categoryId = :categoryId")
     suspend fun entryCountFor(categoryId: String): Int
 
-
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteById(id: String)
-}
-
-@Dao
-interface TagDao {
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insert(tag: TagEntity)
-
-    @Query("SELECT * FROM tags")
-    suspend fun listAll(): List<TagEntity>
-}
-
-@Dao
-interface EntryTagDao {
-
-    @Insert
-    suspend fun insertAll(links: List<EntryTagEntity>)
-
-    @Query("SELECT tagName FROM entry_tags WHERE entryId = :entryId")
-    suspend fun tagsFor(entryId: String): List<String>
-
-    @Query("DELETE FROM entry_tags WHERE entryId = :entryId")
-    suspend fun deleteFor(entryId: String)
 }

@@ -11,22 +11,19 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * T13 DAO 验收（真 SQLite，in-memory；DAO 逻辑与加密无关）：
- * 归一化搜索、分类/标签过滤、级联删除、计数。
+ * 归一化搜索、分类过滤、计数、收藏单列更新。
  */
 @RunWith(AndroidJUnit4::class)
 class EntryDaoTest {
 
     private lateinit var db: VaultDatabase
     private val entryDao get() = db.entryDao()
-    private val tagDao get() = db.tagDao()
-    private val entryTagDao get() = db.entryTagDao()
 
     @Before
     fun setUp() {
@@ -49,11 +46,6 @@ class EntryDaoTest {
             categoryId = categoryId, totpSecretCipher = null, createdAt = 1L, updatedAt = 1L,
         )
 
-    private suspend fun link(entryId: String, tag: String) {
-        tagDao.insert(TagEntity(tag))
-        entryTagDao.insertAll(listOf(EntryTagEntity(entryId, tag)))
-    }
-
     @Test
     fun searchMatchesLowerCasedColumnsCaseInsensitively() = runBlocking {
         entryDao.upsert(entry("e1", "GitHub", "OctoCat"))
@@ -73,32 +65,11 @@ class EntryDaoTest {
     }
 
     @Test
-    fun searchByTagJoinsEntryTags() = runBlocking {
-        entryDao.upsert(entry("e1", "A"))
-        entryDao.upsert(entry("e2", "B"))
-        link("e1", "work")
-
-        assertEquals(listOf("e1"), entryDao.searchByTag("work", null, "").map { it.id })
-        assertTrue(entryDao.searchByTag("nomatch", null, "").isEmpty())
-    }
-
-    @Test
     fun countReflectsRows() = runBlocking {
         entryDao.upsert(entry("e1", "A"))
         entryDao.upsert(entry("e2", "B"))
 
         assertEquals(2, entryDao.count())
-    }
-
-    @Test
-    fun deletingEntryCascadesTagLinksButKeepsTags() = runBlocking {
-        entryDao.upsert(entry("e1", "A"))
-        link("e1", "work")
-
-        entryDao.deleteById("e1")
-
-        assertTrue(entryTagDao.tagsFor("e1").isEmpty())
-        assertEquals("work", tagDao.listAll().single().name) // 标签保留（分类回退语义一致）
     }
 
     /**

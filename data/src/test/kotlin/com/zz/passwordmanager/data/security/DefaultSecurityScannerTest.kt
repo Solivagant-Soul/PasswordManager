@@ -28,7 +28,7 @@ class DefaultSecurityScannerTest {
     ) {
         coEvery { repository.get(id) } returns EntryDetail(
             id = id, title = id, username = "u$id", url = null, notes = null,
-            categoryId = null, tags = emptyList(), totpEnabled = false,
+            categoryId = null, totpEnabled = false,
             createdAt = updatedAt, updatedAt = updatedAt,
         )
         coEvery { repository.revealPassword(id) } returns Result.success(password.toCharArray())
@@ -40,7 +40,7 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `empty vault reports zeroes`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(emptyList())
+        coEvery { repository.search("", null) } returns flowOf(emptyList())
 
         val report = DefaultSecurityScanner(repository, now = { NOW }).scan()
 
@@ -50,7 +50,7 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `weak passwords are flagged`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(ids("a", "b"))
+        coEvery { repository.search("", null) } returns flowOf(ids("a", "b"))
         entry("a", "abc", NOW)          // < 8 位 → 弱
         entry("b", "Abcdefghi123456!", NOW) // 强
 
@@ -61,7 +61,7 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `duplicate passwords are grouped`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(ids("a", "b", "c"))
+        coEvery { repository.search("", null) } returns flowOf(ids("a", "b", "c"))
         val shared = "SharedPass123!"
         entry("a", shared, NOW)
         entry("b", shared, NOW)
@@ -75,7 +75,7 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `entries older than threshold are flagged as stale`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(ids("old", "new"))
+        coEvery { repository.search("", null) } returns flowOf(ids("old", "new"))
         entry("old", "Abcdefghi123456!", NOW - 200 * SecurityReport.MILLIS_PER_DAY)
         entry("new", "Abcdefghi123456!", NOW)
 
@@ -86,7 +86,7 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `exactly at threshold is not stale`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(ids("edge"))
+        coEvery { repository.search("", null) } returns flowOf(ids("edge"))
         entry("edge", "Abcdefghi123456!", NOW - SecurityReport.STALE_DAYS_DAYS * SecurityReport.MILLIS_PER_DAY)
 
         val report = DefaultSecurityScanner(repository, now = { NOW }).scan()
@@ -96,7 +96,7 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `report carries no plaintext`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(ids("a"))
+        coEvery { repository.search("", null) } returns flowOf(ids("a"))
         entry("a", "TopSecretPassword123", NOW)
 
         val report = DefaultSecurityScanner(repository, now = { NOW }).scan()
@@ -108,10 +108,10 @@ class DefaultSecurityScannerTest {
 
     @Test
     fun `failure to reveal a password does not abort the scan`() = runTest {
-        coEvery { repository.search("", null, null) } returns flowOf(ids("a", "b"))
+        coEvery { repository.search("", null) } returns flowOf(ids("a", "b"))
         coEvery { repository.get("a") } returns EntryDetail(
             id = "a", title = "a", username = "u", url = null, notes = null,
-            categoryId = null, tags = emptyList(), totpEnabled = false,
+            categoryId = null, totpEnabled = false,
             createdAt = NOW, updatedAt = NOW,
         )
         coEvery { repository.revealPassword("a") } returns Result.failure(

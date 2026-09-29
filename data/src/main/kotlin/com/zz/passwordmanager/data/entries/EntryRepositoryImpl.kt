@@ -3,8 +3,6 @@ package com.zz.passwordmanager.data.entries
 import com.zz.passwordmanager.data.crypto.KeyManager
 import com.zz.passwordmanager.data.db.EntryEntity
 import com.zz.passwordmanager.data.db.EntryRow
-import com.zz.passwordmanager.data.db.EntryTagEntity
-import com.zz.passwordmanager.data.db.TagEntity
 import com.zz.passwordmanager.data.db.VaultDatabaseProvider
 import com.zz.passwordmanager.data.vault.VaultSessionManager
 import com.zz.passwordmanager.data.vault.VaultState
@@ -49,33 +47,27 @@ class EntryRepositoryImpl(
      * 锁定态用 [flatMapLatest] 换成空序列而不是抛异常：锁定时 [applyLocked] 已经在
      * 清理 UI 状态，这里只需停止供数，不必把 VaultLockedException 抛给收集协程。
      */
-    override fun search(query: String, categoryId: String?, tag: String?): Flow<List<EntrySummary>> =
+    override fun search(query: String, categoryId: String?): Flow<List<EntrySummary>> =
         sessionManager.state.flatMapLatest { vaultState: VaultState ->
             if (vaultState !is VaultState.Unlocked) {
                 flowOf(emptyList<EntrySummary>())
             } else {
                 val db = dbProvider.get(vaultState.session.dek)
-                val normalized = query.trim().lowercase()
-                val rows = if (tag != null) {
-                    db.entryDao().observeByTag(tag.trim().lowercase(), categoryId, normalized)
-                } else {
-                    db.entryDao().observe(normalized, categoryId)
-                }
-                rows.map { list: List<EntryRow> -> list.map { it.toSummary() } }
+                db.entryDao()
+                    .observe(query.trim().lowercase(), categoryId)
+                    .map { list: List<EntryRow> -> list.map { it.toSummary() } }
             }
         }.flowOn(ioDispatcher)
 
     override suspend fun get(id: String): EntryDetail? = withContext(ioDispatcher) {
         val db = dbProvider.get(sessionManager.requireUnlocked().dek)
-        db.entryDao().getById(id)?.let { it.toDetail(db.entryTagDao().tagsFor(id)) }
+        db.entryDao().getById(id)?.toDetail()
     }
 
     override suspend fun create(input: EntryInput): Result<String> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
         val db = dbProvider.get(dek)
         val entryDao = db.entryDao()
-        val tagDao = db.tagDao()
-        val entryTagDao = db.entryTagDao()
 
         val issues = validate(input)
         if (issues.isNotEmpty()) {
@@ -113,7 +105,6 @@ class EntryRepositoryImpl(
                 updatedAt = now,
             ),
         )
-        saveTags(tagDao, entryTagDao, id, input.tags)
         Result.success(id)
     }
 
@@ -121,8 +112,6 @@ class EntryRepositoryImpl(
         val dek = sessionManager.requireUnlocked().dek
         val db = dbProvider.get(dek)
         val entryDao = db.entryDao()
-        val tagDao = db.tagDao()
-        val entryTagDao = db.entryTagDao()
 
         val existing = entryDao.getById(id)
             ?: return@withContext Result.failure(
@@ -135,8 +124,6 @@ class EntryRepositoryImpl(
             )
         }
 
-        entryTagDao.deleteFor(id)
-        saveTags(tagDao, entryTagDao, id, input.tags)
         entryDao.upsert(
             existing.copy(
                 title = input.title.trim(),
@@ -174,7 +161,7 @@ class EntryRepositoryImpl(
 
     override suspend fun delete(id: String): Result<Unit> = withContext(ioDispatcher) {
         val dek = sessionManager.requireUnlocked().dek
-        dbProvider.get(dek).entryDao().deleteById(id) // entry_tags 经外键 CASCADE 清理
+        dbProvider.get(dek).entryDao().deleteById(id)
         Result.success(Unit)
     }
 
@@ -186,19 +173,6 @@ class EntryRepositoryImpl(
             )
         val plain = keyManager.decrypt(entry.passwordCipher, dek)
         Result.success(plain.decodeToString().toCharArray()) // plain 字节由 GC 处理（T05 已知局限）
-    }
-
-    private suspend fun saveTags(
-        tagDao: com.zz.passwordmanager.data.db.TagDao,
-        entryTagDao: com.zz.passwordmanager.data.db.EntryTagDao,
-        entryId: String,
-        tags: List<String>,
-    ) {
-        val distinct = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(TAGS_MAX)
-        if (distinct.isNotEmpty()) {
-            distinct.forEach { tagDao.insert(TagEntity(name = it)) }
-            entryTagDao.insertAll(distinct.map { EntryTagEntity(entryId = entryId, tagName = it) })
-        }
     }
 
     private fun validate(input: EntryInput): List<EntryIssue> {
@@ -214,24 +188,20 @@ class EntryRepositoryImpl(
         if (url.isNotEmpty() && !url.startsWith("http://") && !url.startsWith("https://")) {
             issues += EntryIssue("url", "must start with http:// or https://")
         }
-        if (input.tags.size > TAGS_MAX) {
-            issues += EntryIssue("tags", "at most $TAGS_MAX tags")
-        }
         return issues
     }
 
     private fun com.zz.passwordmanager.data.db.EntryRow.toSummary() =
         EntrySummary(id, title, username, url, categoryId, favorite, EntryType.from(type))
 
-    private fun EntryEntity.toDetail(tags: List<String>) = EntryDetail(
+    private fun EntryEntity.toDetail() = EntryDetail(
         id = id, title = title, username = username, url = url, notes = notes,
-        categoryId = categoryId, tags = tags, totpEnabled = totpSecretCipher != null,
+        categoryId = categoryId, totpEnabled = totpSecretCipher != null,
         favorite = favorite, type = EntryType.from(type),
         createdAt = createdAt, updatedAt = updatedAt,
     )
 
     private companion object {
         const val TITLE_MAX = 100
-        const val TAGS_MAX = 20
     }
 }
