@@ -30,6 +30,9 @@ import com.zz.passwordmanager.R
 import com.zz.passwordmanager.autofill.AutofillAvailability
 import com.zz.passwordmanager.domain.entries.EntryDetail
 import com.zz.passwordmanager.platform.biometric.BiometricDiagnostics
+import com.zz.passwordmanager.platform.integrity.AndroidRootEnvironmentProbe
+import com.zz.passwordmanager.platform.integrity.RootDetection
+import com.zz.passwordmanager.platform.integrity.RootReport
 import kotlinx.coroutines.launch
 
 /** 手写轻量导航（延续 T15 的「不引 navigation-compose」决策）：每个 Tab 一个回退栈。 */
@@ -52,6 +55,8 @@ sealed interface Screen {
     data object SettingAutofill : Screen
     /** v1.3.0：FR-7 加密备份导出/导入（此前是设置主页里的置灰占位行）。 */
     data object SettingBackup : Screen
+    /** v2.0.0：FR-10 root 环境检测（只提示风险，不拦截任何功能）。 */
+    data object SettingRootDetection : Screen
 }
 
 /**
@@ -89,6 +94,27 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
         )
     }
     var currentTab by remember { mutableStateOf(AppTab.PASSWORDS) }
+
+    // v2.0.0 root 环境检测（FR-10）。**刻意不做在解锁路径上**：检测要 stat 二十几个
+    // 路径、查十个包，虽是毫秒量级且全在 IO 上，但解锁是每屏必经之路，没理由让它变慢。
+    // 改为「用户进设置 Tab 时探一次」——设置主页那一行要显示结论，总得有来源；
+    // 子页里的「重新检测」则随时可点。结果只用来显示文案，**不参与任何功能判断**。
+    val rootProbe = remember(appContext) { AndroidRootEnvironmentProbe(appContext) }
+    var rootReport by remember { mutableStateOf<RootReport?>(null) }
+    var rootScanning by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun refreshRootReport() {
+        rootScanning = true
+        rootReport = RootDetection.evaluate(rootProbe.probe())
+        rootScanning = false
+    }
+
+    // 每次进入设置 Tab 重新探：root 状态不是一成不变的（刷机、装/卸 Magisk），
+    // 而重探的代价只够在「用户明确要看设置」时付。
+    LaunchedEffect(currentTab) {
+        if (currentTab == AppTab.SETTINGS) refreshRootReport()
+    }
 
     // 点 Tab 一律回到该 Tab 的根页（覆盖 T44 的「切 Tab 不清栈」）。
     // 用户的原话是「点了新建 → 点设置 → 再点密码，应该显示所有密码的界面」：
@@ -262,10 +288,18 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                 autofillEnabled = autofillEnabled,
                 defaultPasswordLength = state.defaultPasswordLength,
                 appVersionName = versionName,
+                // 探测结果只在有结论时显示状态；没有结论就明说「未检测」，
+                // 不用一个空字符串把「还没查」伪装成「已查过且正常」
+                rootDetectionLabel = when {
+                    rootReport != null -> rootReport!!.headline
+                    rootScanning -> "检测中…"
+                    else -> "未检测"
+                },
                 errorMessage = state.errorMessage,
                 successMessage = state.successMessage,
                 onOpenAutoLock = { backStack.add(Screen.SettingAutoLock) },
                 onOpenScreenshots = { backStack.add(Screen.SettingScreenshots) },
+                onOpenRootDetection = { backStack.add(Screen.SettingRootDetection) },
                 onOpenBiometric = { backStack.add(Screen.SettingBiometric) },
                 onOpenAutofill = { backStack.add(Screen.SettingAutofill) },
                 onOpenDefaultLength = { backStack.add(Screen.SettingDefaultLength) },
@@ -281,6 +315,13 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
             )
 
             Screen.SettingBackup -> BackupSettingScreen(
+                onBack = { backStack.removeAt(backStack.lastIndex) },
+            )
+
+            Screen.SettingRootDetection -> RootDetectionScreen(
+                report = rootReport,
+                scanning = rootScanning,
+                onRescan = { scope.launch { refreshRootReport() } },
                 onBack = { backStack.removeAt(backStack.lastIndex) },
             )
 

@@ -44,10 +44,12 @@ fun SettingsScreen(
     autofillEnabled: Boolean,
     defaultPasswordLength: Int,
     appVersionName: String,
+    rootDetectionLabel: String,
     errorMessage: String?,
     successMessage: String?,
     onOpenAutoLock: () -> Unit,
     onOpenScreenshots: () -> Unit,
+    onOpenRootDetection: () -> Unit,
     onOpenBiometric: () -> Unit,
     onOpenAutofill: () -> Unit,
     onOpenDefaultLength: () -> Unit,
@@ -83,6 +85,15 @@ fun SettingsScreen(
                 // Visibility 属于 material-icons-extended，不为此加一个依赖。
                 icon = { SettingIcon(R.drawable.ic_eye) },
                 onClick = onOpenScreenshots,
+            )
+            // v2.0.0：紧跟在「允许截屏」后面，因为 root 环境下 FLAG_SECURE 会被绕过——
+            // 两者讲的是同一件事的两个半边。检测是启发式的，值只报状态，
+            // 「可能失效到什么程度」放子页里讲。
+            SettingRow(
+                title = "root 环境检测",
+                value = rootDetectionLabel,
+                icon = { SettingIcon(R.drawable.ic_shield) },
+                onClick = onOpenRootDetection,
             )
             SettingRow(
                 title = "自动锁定",

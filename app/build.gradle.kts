@@ -24,7 +24,7 @@ android {
         versionCode = 1
         // versionCode 刻意留在 1：设备上已装的包就是 versionCode 1，
         // 跟着 versionName 一起抬到 2 会让 `adb install -r` 拒绝升级，只能卸载重装。
-        versionName = "1.3.0"
+        versionName = "2.0.0"
     }
 
     signingConfigs {
