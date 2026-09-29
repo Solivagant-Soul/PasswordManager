@@ -50,6 +50,9 @@ fun EntryEditScreen(
     revealed: String?,
     errorMessage: String?,
     onGeneratePassword: () -> String?,
+    // 复制走 VM 现有的 30 秒剪贴板清理通道，故回传当前**显示中**的值而不是
+    // 参数：让「复制」在新建（输入的）与编辑（揭示的原密码/改后的）两种态下语义一致。
+    onCopyPassword: (String) -> Unit,
     onReveal: () -> Unit,
     onHide: () -> Unit,
     onSave: (EntryInput) -> Unit,
@@ -159,6 +162,16 @@ fun EntryEditScreen(
                             // 自绘 drawable 走 Icon + painterResource：Image 会让 drawable 里
                             // 的 ?attr/colorControlNormal 直接生效，暗色模式不跟随主题色。
                             Icon(painter = painterResource(R.drawable.ic_bolt), contentDescription = "生成密码")
+                        }
+                        // 复制：明文此刻就在输入框里（明文不残留只约束「不主动回填」，
+                        // 不约束「用户显式点复制」），故直接取 shownPassword，
+                        // 无需先揭示——点了复制却还闪一下眼睛反而多一次状态切换。
+                        // 空白时 VM 侧 copyPlainText 自行短路，按钮不额外禁用。
+                        IconButton(onClick = { onCopyPassword(shownPassword) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_copy),
+                                contentDescription = "复制密码",
+                            )
                         }
                     }
                 },

@@ -289,6 +289,7 @@ fun AppNav(viewModel: VaultViewModel = viewModel()) {
                     revealed = top.entryId?.let { state.revealed[it] },
                     errorMessage = state.errorMessage,
                     onGeneratePassword = viewModel::generatePasswordNow,
+                    onCopyPassword = viewModel::copyPlainText,
                     onReveal = { top.entryId?.let(viewModel::reveal) },
                     onHide = { top.entryId?.let(viewModel::hide) },
                     onSave = { input -> viewModel.save(top.entryId, input) { backStack.removeAt(backStack.lastIndex) } },

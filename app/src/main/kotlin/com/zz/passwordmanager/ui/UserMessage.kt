@@ -86,7 +86,6 @@ private fun invalidMessage(issues: List<String>): String {
         has("title") -> "标题必填且不超过 100 字"
         has("password") -> "密码至少 8 位，且需包含大写、小写、数字、符号中的两类"
         has("url") -> "网址须以 http:// 或 https:// 开头"
-        has("tags") -> "标签最多 20 个"
         else -> "输入不符合要求"
     }
 }
